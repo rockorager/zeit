@@ -43,6 +43,8 @@ pub const Instant = struct {
         unix_timestamp: i64,
         /// a specific unix timestamp (in nanoseconds)
         unix_nano: i128,
+        /// create an Instant from a calendar date and time
+        time: Time,
     };
 
     /// convert this Instant to another timezone
@@ -87,6 +89,7 @@ pub const Instant = struct {
             .millisecond = @intCast(millis),
             .microsecond = @intCast(micros),
             .nanosecond = @intCast(nanos),
+            .offset = @intCast(adjusted.timestamp - self.unixTimestamp()),
         };
     }
 
@@ -127,6 +130,7 @@ pub fn instant(cfg: Instant.Config) !Instant {
         .now => std.time.nanoTimestamp(),
         .unix_timestamp => |unix| unix * ns_per_s,
         .unix_nano => |nano| nano,
+        .time => |time| time.instant().timestamp,
     };
     return .{
         .timestamp = ts,
@@ -240,6 +244,38 @@ pub const Time = struct {
     millisecond: u10 = 0, // 0-999
     microsecond: u10 = 0, // 0-999
     nanosecond: u10 = 0, // 0-999
+    offset: i32 = 0, // offset from UTC in seconds
+
+    /// Creates a UTC Instant for this time
+    pub fn instant(self: Time) Instant {
+        const days = daysFromCivil(.{
+            .year = self.year,
+            .month = self.month,
+            .day = self.day,
+        });
+        return .{
+            .timestamp = days * ns_per_day +
+                @as(i128, self.hour) * ns_per_hour +
+                @as(i128, self.minute) * ns_per_min +
+                @as(i128, self.second) * ns_per_s +
+                @as(i128, self.millisecond) * ns_per_ms +
+                @as(i128, self.microsecond) * ns_per_us +
+                @as(i128, self.nanosecond) +
+                @as(i128, self.offset) * ns_per_s,
+
+            .timezone = &utc,
+        };
+    }
+
+    test "instant" {
+        const original = Instant{
+            .timestamp = std.time.nanoTimestamp(),
+            .timezone = &utc,
+        };
+        const time = original.time();
+        const round_trip = time.instant();
+        try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
+    }
 };
 
 pub const TimeZone = struct {
@@ -1176,34 +1212,19 @@ pub fn civilFromDays(days: i64) Date {
         .day = @truncate(d),
     };
 }
-
-test "integration" {
-    const alloc = std.testing.allocator;
-
-    // Create an instant in time. Default config returns "now" in UTC
-    const inst = instant(.{});
-    // Get our local timezone from the system
-    const tz = try local(alloc);
-    defer tz.deinit();
-
-    // Convert our instant into our timezone. We could get this by passing the
-    // timezone we want our Instant in as part of the config
-    const inst_loc = inst.in(&tz);
-
-    // Print the datetime for each
-    std.log.warn("utc: {}", .{inst.time()});
-    // utc: zeit.Time{ .year = 2024, .month = zeit.Month.mar, .day = 16, .hour = 12, .minute = 27, .second = 6, .millisecond = 0, .microsecond = 0, .nanosecond = 0 }
-
-    std.log.warn("loc: {}", .{inst_loc.time()});
-    // loc: zeit.Time{ .year = 2024, .month = zeit.Month.mar, .day = 16, .hour = 7, .minute = 27, .second = 6, .millisecond = 0, .microsecond = 0, .nanosecond = 0 }
-
-    //
-    // const utc_date = civilFromDays(daysSinceEpoch(stamp));
-    // std.log.warn("utc: {}, ts: {d}", .{ utc_date, stamp });
-    //
-    // const adjusted = tz.adjust(stamp);
-    // const local_date = civilFromDays(daysSinceEpoch(adjusted.timestamp));
-    // std.log.warn("loc: {}, ts: {d}", .{ local_date, adjusted.timestamp });
+/// return the number of days since the epoch from the civil date
+pub fn daysFromCivil(date: Date) i64 {
+    const m = @intFromEnum(date.month);
+    const y = if (m <= 2) date.year - 1 else date.year;
+    const era = if (y >= 0) @divFloor(y, 400) else @divFloor(y - 399, 400);
+    const yoe: u32 = @intCast(y - era * 400);
+    const doy = blk: {
+        const a: u32 = if (m > 2) m - 3 else m + 9;
+        const b = a * 153 + 2;
+        break :blk @divFloor(b, 5) + date.day - 1;
+    };
+    const doe: i32 = @intCast(yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy);
+    return era * days_per_era + doe - 719468;
 }
 
 test {

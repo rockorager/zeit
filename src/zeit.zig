@@ -5,6 +5,9 @@ const assert = std.debug.assert;
 const ns_per_us = std.time.ns_per_us;
 const ns_per_ms = std.time.ns_per_ms;
 const ns_per_s = std.time.ns_per_s;
+const ns_per_min = std.time.ns_per_min;
+const ns_per_hour = std.time.ns_per_hour;
+const ns_per_day = std.time.ns_per_day;
 const s_per_min = std.time.s_per_min;
 const s_per_hour = std.time.s_per_hour;
 const s_per_day = std.time.s_per_day;
@@ -86,6 +89,36 @@ pub const Instant = struct {
             .nanosecond = @intCast(nanos),
         };
     }
+
+    /// add the duration to the Instant
+    pub fn add(self: Instant, duration: Duration) Instant {
+        const ns = duration.days * ns_per_day +
+            duration.hours * ns_per_hour +
+            duration.minutes * ns_per_min +
+            duration.seconds * ns_per_s +
+            duration.milliseconds * ns_per_ms +
+            duration.microseconds * ns_per_us +
+            duration.nanoseconds;
+        return .{
+            .timestamp = self.timestamp + ns,
+            .timezone = self.timezone,
+        };
+    }
+
+    /// subtract the duration from the Instant
+    pub fn subtract(self: Instant, duration: Duration) Instant {
+        const ns = duration.days * ns_per_day +
+            duration.hours * ns_per_hour +
+            duration.minutes * ns_per_min +
+            duration.seconds * ns_per_s +
+            duration.milliseconds * ns_per_ms +
+            duration.microseconds * ns_per_us +
+            duration.nanoseconds;
+        return .{
+            .timestamp = self.timestamp - ns,
+            .timezone = self.timezone,
+        };
+    }
 };
 
 /// create a new Instant
@@ -157,6 +190,16 @@ pub const Month = enum(u4) {
         try std.testing.expectEqual(31, Month.feb.daysBefore(2001));
         try std.testing.expectEqual(59, Month.mar.daysBefore(2001));
     }
+};
+
+pub const Duration = struct {
+    days: usize = 0,
+    hours: usize = 0,
+    minutes: usize = 0,
+    seconds: usize = 0,
+    milliseconds: usize = 0,
+    microseconds: usize = 0,
+    nanoseconds: usize = 0,
 };
 
 pub const Weekday = enum(u3) {

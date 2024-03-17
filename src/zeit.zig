@@ -22,6 +22,22 @@ pub fn local(alloc: std.mem.Allocator) !TimeZone {
     return TimeZone.parse(alloc, f.reader());
 }
 
+pub fn loadTimeZone(alloc: std.mem.Allocator, loc: []const u8) !TimeZone {
+    const zone_dirs = [_][]const u8{
+        "/usr/share/zoneinfo/",
+        "/usr/share/lib/zoneinfo/",
+        "/usr/lib/locale/TZ/",
+        "/etc/zoneinfo",
+    };
+    var dir: std.fs.Dir = for (zone_dirs) |zone_dir| {
+        const dir = std.fs.openDirAbsolute(zone_dir, .{}) catch continue;
+        break dir;
+    } else return error.NoTimeZone;
+    defer dir.close();
+    const f = try dir.openFile(loc, .{});
+    return TimeZone.parse(alloc, f.reader());
+}
+
 /// An Instant in time. Instants occur at a precise time and place, thus must
 /// always carry with them a timezone.
 pub const Instant = struct {

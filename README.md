@@ -34,7 +34,10 @@ pub fn main() void {
     //    .millisecond = 496,
     //    .microsecond = 706,
     //    .nanosecond = 64
-    //}
+    //    .offset = -18000,
+    // }
 
+    // Load an arbitrary location
+    const vienna = zeit.loadTimeZone("Europe/Vienna");
 }
 ```

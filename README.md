@@ -37,8 +37,21 @@ pub fn main() void {
     //    .offset = -18000,
     // }
 
-    // Load an arbitrary location
+    // Load an arbitrary location using IANA location syntax
     const vienna = zeit.loadTimeZone(alloc, "Europe/Vienna");
     defer vienna.deinit();
+
+    // Parse an Instant from an ISO8601 or RFC3339 string
+    const iso = zeit.instant(.{
+	.source = .{
+	    .iso8601 = "2024-03-16T08:38:29.496-1200",
+	},
+    });
+
+    const rfc3339 = zeit.instant(.{
+	.source = .{
+	    .rfc3339 = "2024-03-16T08:38:29.496706064-1200",
+	},
+    });
 }
 ```

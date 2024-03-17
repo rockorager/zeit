@@ -55,12 +55,41 @@ pub const Instant = struct {
     pub const Source = union(enum) {
         /// the current system time
         now,
+
         /// a specific unix timestamp (in seconds)
         unix_timestamp: i64,
+
         /// a specific unix timestamp (in nanoseconds)
         unix_nano: i128,
+
         /// create an Instant from a calendar date and time
         time: Time,
+
+        /// parse a datetime from an ISO8601 string
+        /// Supports most ISO8601 formats, _except_:
+        /// - Week numbers (ie YYYY-Www)
+        /// - Fractional minutes (ie YYYY-MM-DDTHH:MM.mmm)
+        ///
+        /// Strings can be in the extended or compact format and use ' ' or "T"
+        /// as the time delimiter
+        /// Examples of paresable strings:
+        /// YYYY-MM-DD
+        /// YYYY-MM-DDTHH
+        /// YYYY-MM-DDTHH:MM
+        /// YYYY-MM-DDTHH:MM:SS
+        /// YYYY-MM-DDTHH:MM:SS.sss
+        /// YYYY-MM-DDTHH:MM:SS.ssssss
+        /// YYYY-MM-DDTHH:MM:SSZ
+        /// YYYY-MM-DDTHH:MM:SS+hh:mm
+        /// YYYYMMDDTHHMMSSZ
+        iso8601: []const u8,
+
+        /// Parse a datetime from an RFC3339 string. RFC3339 is similar to
+        /// ISO8601 but is more strict, and allows for arbitrary fractional
+        /// seconds. Using this field will use the same parser `iso8601`, but is
+        /// provided for clarity
+        /// Format: YYYY-MM-DDTHH:MM:SS.sss+hh:mm
+        rfc3339: []const u8,
     };
 
     /// convert this Instant to another timezone
@@ -147,6 +176,12 @@ pub fn instant(cfg: Instant.Config) !Instant {
         .unix_timestamp => |unix| unix * ns_per_s,
         .unix_nano => |nano| nano,
         .time => |time| time.instant().timestamp,
+        .iso8601,
+        .rfc3339,
+        => |iso| blk: {
+            const t = try Time.fromISO8601(iso);
+            break :blk t.instant().timestamp;
+        },
     };
     return .{
         .timestamp = ts,
@@ -294,11 +329,8 @@ pub const Time = struct {
             minute,
             minute_fraction_or_second,
             second_fraction_or_offset,
-            offset_hour,
-            offset_minute,
         };
         var state: State = .year;
-        var offset_is_neg = false;
         var i: usize = 0;
         while (i < iso.len) {
             switch (state) {
@@ -379,24 +411,37 @@ pub const Time = struct {
                 .second_fraction_or_offset => {
                     switch (iso[i]) {
                         'Z' => break,
-                        '+' => {
+                        '+', '-' => {
+                            const sign: i32 = if (iso[i] == '-') -1 else 1;
                             i += 1;
-                            state = .offset_hour;
-                        },
-                        '-' => {
-                            i += 1;
-                            state = .offset_hour;
-                            offset_is_neg = true;
+                            const hour = try parseInt(u5, iso[i .. i + 2], 10);
+                            i += 2;
+                            time.offset = sign * hour * s_per_hour;
+                            if (i >= iso.len - 1) break;
+                            if (iso[i] == ':') i += 1;
+                            const minute = try parseInt(u6, iso[i .. i + 2], 10);
+                            time.offset += sign * minute * s_per_min;
+                            i += 2;
+                            break;
                         },
                         '.' => {
                             i += 1;
-                            time.millisecond = try parseInt(u10, iso[i .. i + 3], 10);
-                            i += 3;
+                            const frac_end = std.mem.indexOfAnyPos(u8, iso, i, "Z+-") orelse iso.len;
+                            const rhs = try parseInt(u64, iso[i..frac_end], 10);
+                            const sigs = frac_end - i;
+                            // convert sigs to nanoseconds
+                            const pow = std.math.pow(u64, 10, @as(u64, @intCast(9 - sigs)));
+                            var nanos = rhs * pow;
+                            time.millisecond = @intCast(@divFloor(nanos, ns_per_ms));
+                            nanos -= @as(u64, time.millisecond) * ns_per_ms;
+                            time.microsecond = @intCast(@divFloor(nanos, ns_per_us));
+                            nanos -= @as(u64, time.microsecond) * ns_per_us;
+                            time.nanosecond = @intCast(nanos);
+                            i = frac_end;
                         },
                         else => return error.InvalidISO8601,
                     }
                 },
-                else => {},
             }
         }
         return time;
@@ -471,6 +516,20 @@ pub const Time = struct {
         {
             const s_frac = try Time.fromISO8601("2000-02-12T11:12:13.123Z");
             try std.testing.expectEqual(123, s_frac.millisecond);
+            try std.testing.expectEqual(0, s_frac.microsecond);
+            try std.testing.expectEqual(0, s_frac.nanosecond);
+        }
+        {
+            const offset = try Time.fromISO8601("2000-02-12T11:12:13.123-12:00");
+            try std.testing.expectEqual(-12 * s_per_hour, offset.offset);
+        }
+        {
+            const offset = try Time.fromISO8601("2000-02-12T11:12:13+12:30");
+            try std.testing.expectEqual(12 * s_per_hour + 30 * s_per_min, offset.offset);
+        }
+        {
+            const offset = try Time.fromISO8601("20000212T111213+1230");
+            try std.testing.expectEqual(12 * s_per_hour + 30 * s_per_min, offset.offset);
         }
     }
 

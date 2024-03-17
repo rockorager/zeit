@@ -38,6 +38,7 @@ pub fn main() void {
     // }
 
     // Load an arbitrary location
-    const vienna = zeit.loadTimeZone("Europe/Vienna");
+    const vienna = zeit.loadTimeZone(alloc, "Europe/Vienna");
+    defer vienna.deinit();
 }
 ```

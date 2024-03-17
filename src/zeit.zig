@@ -267,6 +267,197 @@ pub const Time = struct {
         };
     }
 
+    pub fn fromISO8601(iso: []const u8) !Time {
+        const parseInt = std.fmt.parseInt;
+        var time: Time = .{};
+        const State = enum {
+            year,
+            month_or_ordinal,
+            day,
+            hour,
+            minute,
+            minute_fraction_or_second,
+            second_fraction_or_offset,
+            offset_hour,
+            offset_minute,
+        };
+        var state: State = .year;
+        var offset_is_neg = false;
+        var i: usize = 0;
+        while (i < iso.len) {
+            switch (state) {
+                .year => {
+                    if (iso.len <= 4) {
+                        // year only data
+                        const int = try parseInt(i32, iso, 10);
+                        time.year = int * std.math.pow(i32, 10, @as(i32, @intCast(4 - iso.len)));
+                        break;
+                    } else {
+                        time.year = try parseInt(i32, iso[0..4], 10);
+                        state = .month_or_ordinal;
+                        i += 4;
+                        if (iso[i] == '-') i += 1;
+                    }
+                },
+                .month_or_ordinal => {
+                    const token_end = std.mem.indexOfAnyPos(u8, iso, i, "- T") orelse iso.len;
+                    switch (token_end - i) {
+                        2 => {
+                            const m: u4 = try parseInt(u4, iso[i..token_end], 10);
+                            time.month = @enumFromInt(m);
+                            state = .day;
+                        },
+                        3 => { // ordinal
+                            const doy = try parseInt(u9, iso[i..token_end], 10);
+                            var m: u4 = 1;
+                            var days: u9 = 0;
+                            while (m <= 12) : (m += 1) {
+                                const month: Month = @enumFromInt(m);
+
+                                if (days + month.lastDay(time.year) < doy) {
+                                    days += month.lastDay(time.year);
+                                    continue;
+                                }
+                                time.month = month;
+                                time.day = @intCast(doy - days);
+                                break;
+                            }
+                            state = .hour;
+                        },
+                        4 => { // MMDD
+                            const m: u4 = try parseInt(u4, iso[i .. i + 2], 10);
+                            time.month = @enumFromInt(m);
+                            time.day = try parseInt(u4, iso[i + 2 .. token_end], 10);
+                            state = .hour;
+                        },
+                        else => return error.InvalidISO8601,
+                    }
+                    i = token_end + 1;
+                },
+                .day => {
+                    time.day = try parseInt(u5, iso[i .. i + 2], 10);
+                    // add 3 instead of 2 because we either have a trailing ' ',
+                    // 'T', or EOF
+                    i += 3;
+                    state = .hour;
+                },
+                .hour => {
+                    time.hour = try parseInt(u5, iso[i .. i + 2], 10);
+                    i += 2;
+                    state = .minute;
+                },
+                .minute => {
+                    if (iso[i] == ':') i += 1;
+                    time.minute = try parseInt(u6, iso[i .. i + 2], 10);
+                    i += 2;
+                    state = .minute_fraction_or_second;
+                },
+                .minute_fraction_or_second => {
+                    const b = iso[i];
+                    if (b == '.') return error.UnhandledFormat; // TODO:
+                    if (b == ':') i += 1;
+                    time.second = try parseInt(u6, iso[i .. i + 2], 10);
+                    i += 2;
+                    state = .second_fraction_or_offset;
+                },
+                .second_fraction_or_offset => {
+                    switch (iso[i]) {
+                        'Z' => break,
+                        '+' => {
+                            i += 1;
+                            state = .offset_hour;
+                        },
+                        '-' => {
+                            i += 1;
+                            state = .offset_hour;
+                            offset_is_neg = true;
+                        },
+                        '.' => {
+                            i += 1;
+                            time.millisecond = try parseInt(u10, iso[i .. i + 3], 10);
+                            i += 3;
+                        },
+                        else => return error.InvalidISO8601,
+                    }
+                },
+                else => {},
+            }
+        }
+        return time;
+    }
+
+    test "fromISO8601" {
+        {
+            const year = try Time.fromISO8601("2000");
+            try std.testing.expectEqual(2000, year.year);
+        }
+        {
+            const ym = try Time.fromISO8601("200002");
+            try std.testing.expectEqual(2000, ym.year);
+            try std.testing.expectEqual(.feb, ym.month);
+
+            const ym_ext = try Time.fromISO8601("2000-02");
+            try std.testing.expectEqual(2000, ym_ext.year);
+            try std.testing.expectEqual(.feb, ym_ext.month);
+        }
+        {
+            const ymd = try Time.fromISO8601("20000212");
+            try std.testing.expectEqual(2000, ymd.year);
+            try std.testing.expectEqual(.feb, ymd.month);
+            try std.testing.expectEqual(12, ymd.day);
+
+            const ymd_ext = try Time.fromISO8601("2000-02-12");
+            try std.testing.expectEqual(2000, ymd_ext.year);
+            try std.testing.expectEqual(.feb, ymd_ext.month);
+            try std.testing.expectEqual(12, ymd_ext.day);
+        }
+        {
+            const ordinal = try Time.fromISO8601("2000031");
+            try std.testing.expectEqual(2000, ordinal.year);
+            try std.testing.expectEqual(.jan, ordinal.month);
+            try std.testing.expectEqual(31, ordinal.day);
+
+            const ordinal_ext = try Time.fromISO8601("2000-043");
+            try std.testing.expectEqual(2000, ordinal_ext.year);
+            try std.testing.expectEqual(.feb, ordinal_ext.month);
+            try std.testing.expectEqual(12, ordinal_ext.day);
+        }
+        {
+            const ymdh = try Time.fromISO8601("20000212 11");
+            try std.testing.expectEqual(2000, ymdh.year);
+            try std.testing.expectEqual(.feb, ymdh.month);
+            try std.testing.expectEqual(12, ymdh.day);
+            try std.testing.expectEqual(11, ymdh.hour);
+
+            const ymdh_ext = try Time.fromISO8601("2000-02-12T11");
+            try std.testing.expectEqual(2000, ymdh_ext.year);
+            try std.testing.expectEqual(.feb, ymdh_ext.month);
+            try std.testing.expectEqual(12, ymdh_ext.day);
+            try std.testing.expectEqual(11, ymdh_ext.hour);
+        }
+        {
+            const full = try Time.fromISO8601("20000212 111213Z");
+            try std.testing.expectEqual(2000, full.year);
+            try std.testing.expectEqual(.feb, full.month);
+            try std.testing.expectEqual(12, full.day);
+            try std.testing.expectEqual(11, full.hour);
+            try std.testing.expectEqual(12, full.minute);
+            try std.testing.expectEqual(13, full.second);
+
+            const full_ext = try Time.fromISO8601("2000-02-12T11:12:13Z");
+            try std.testing.expectEqual(2000, full_ext.year);
+            try std.testing.expectEqual(.feb, full_ext.month);
+            try std.testing.expectEqual(12, full_ext.day);
+            try std.testing.expectEqual(11, full_ext.hour);
+            try std.testing.expectEqual(12, full_ext.minute);
+            try std.testing.expectEqual(13, full_ext.second);
+        }
+        {
+            const s_frac = try Time.fromISO8601("2000-02-12T11:12:13.123Z");
+            try std.testing.expectEqual(123, s_frac.millisecond);
+        }
+    }
+
     test "instant" {
         const original = Instant{
             .timestamp = std.time.nanoTimestamp(),

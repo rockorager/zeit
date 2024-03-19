@@ -311,7 +311,7 @@ pub const Time = struct {
                 @as(i128, self.second) * ns_per_s +
                 @as(i128, self.millisecond) * ns_per_ms +
                 @as(i128, self.microsecond) * ns_per_us +
-                @as(i128, self.nanosecond) +
+                @as(i128, self.nanosecond) -
                 @as(i128, self.offset) * ns_per_s,
 
             .timezone = &utc,

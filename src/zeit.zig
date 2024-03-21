@@ -583,6 +583,53 @@ pub const Time = struct {
         const round_trip = time.instant();
         try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
     }
+
+    pub const Format = union(enum) {
+        rfc3339, // YYYY-MM-DD-THH:MM:SS.sss+00:00
+    };
+
+    pub fn bufPrint(self: Time, buf: []u8, fmt: Format) ![]u8 {
+        switch (fmt) {
+            .rfc3339 => {
+                if (self.year < 0) return error.InvalidTime;
+                if (self.offset == 0)
+                    return std.fmt.bufPrint(
+                        buf,
+                        "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}.{d:0>3}Z",
+                        .{
+                            @as(u32, @intCast(self.year)),
+                            @intFromEnum(self.month),
+                            self.day,
+                            self.hour,
+                            self.minute,
+                            self.second,
+                            self.millisecond,
+                        },
+                    )
+                else {
+                    const h = @divFloor(@abs(self.offset), s_per_hour);
+                    const min = @divFloor(@abs(self.offset) - h * s_per_hour, s_per_min);
+                    const sign: u8 = if (self.offset > 0) '+' else '-';
+                    return std.fmt.bufPrint(
+                        buf,
+                        "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}.{d:0>3}{c}{d:0>2}:{d:0>2}",
+                        .{
+                            @as(u32, @intCast(self.year)),
+                            @intFromEnum(self.month),
+                            self.day,
+                            self.hour,
+                            self.minute,
+                            self.second,
+                            self.millisecond,
+                            sign,
+                            h,
+                            min,
+                        },
+                    );
+                }
+            },
+        }
+    }
 };
 
 pub const TimeZone = struct {

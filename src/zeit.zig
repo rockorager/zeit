@@ -211,6 +211,42 @@ pub const Month = enum(u4) {
         return 30 | (m ^ (m >> 3));
     }
 
+    /// returns the full name of the month, eg "January"
+    pub fn name(self: Month) []const u8 {
+        switch (self) {
+            .jan => "January",
+            .feb => "February",
+            .mar => "March",
+            .apr => "April",
+            .may => "May",
+            .jun => "June",
+            .jul => "July",
+            .aug => "August",
+            .sep => "September",
+            .oct => "October",
+            .nov => "November",
+            .dec => "December",
+        }
+    }
+
+    /// returns the short name of the month, eg "Jan"
+    pub fn shortName(self: Month) []const u8 {
+        switch (self) {
+            .jan => "Jan",
+            .feb => "Feb",
+            .mar => "Mar",
+            .apr => "Apr",
+            .may => "May",
+            .jun => "Jun",
+            .jul => "Jul",
+            .aug => "Aug",
+            .sep => "Sep",
+            .oct => "Oct",
+            .nov => "Nov",
+            .dec => "Dec",
+        }
+    }
+
     test "lastDayOfMonth" {
         try std.testing.expectEqual(29, Month.feb.lastDay(2000));
 
@@ -270,6 +306,32 @@ pub const Weekday = enum(u3) {
     pub fn daysUntil(self: Weekday, other: Weekday) u3 {
         const d = @intFromEnum(other) -% @intFromEnum(self);
         return if (d <= 6) @intCast(d) else @intCast(d +% 7);
+    }
+
+    /// returns the full name of the day, eg "Tuesday"
+    pub fn name(self: Weekday) []const u8 {
+        switch (self) {
+            .sun => "Sunday",
+            .mon => "Monday",
+            .tue => "Tuesday",
+            .wed => "Wednesday",
+            .thu => "Thursday",
+            .fri => "Friday",
+            .sat => "Saturday",
+        }
+    }
+
+    /// returns the short name of the day, eg "Tue"
+    pub fn shortName(self: Weekday) []const u8 {
+        switch (self) {
+            .sun => "Sun",
+            .mon => "Mon",
+            .tue => "Tue",
+            .wed => "Wed",
+            .thu => "Thu",
+            .fri => "Fri",
+            .sat => "Sat",
+        }
     }
 
     test "daysUntil" {

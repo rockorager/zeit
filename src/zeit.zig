@@ -231,20 +231,7 @@ pub const Month = enum(u4) {
 
     /// returns the short name of the month, eg "Jan"
     pub fn shortName(self: Month) []const u8 {
-        return switch (self) {
-            .jan => "Jan",
-            .feb => "Feb",
-            .mar => "Mar",
-            .apr => "Apr",
-            .may => "May",
-            .jun => "Jun",
-            .jul => "Jul",
-            .aug => "Aug",
-            .sep => "Sep",
-            .oct => "Oct",
-            .nov => "Nov",
-            .dec => "Dec",
-        };
+        return self.name()[0..3];
     }
 
     test "lastDayOfMonth" {
@@ -323,15 +310,7 @@ pub const Weekday = enum(u3) {
 
     /// returns the short name of the day, eg "Tue"
     pub fn shortName(self: Weekday) []const u8 {
-        return switch (self) {
-            .sun => "Sun",
-            .mon => "Mon",
-            .tue => "Tue",
-            .wed => "Wed",
-            .thu => "Thu",
-            .fri => "Fri",
-            .sat => "Sat",
-        };
+        return self.name()[0..3];
     }
 
     test "daysUntil" {

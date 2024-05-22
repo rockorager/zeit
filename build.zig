@@ -1,14 +1,14 @@
 const std = @import("std");
 
 /// Allow the full zeit API to be usable at build time
-pub usingnamespace @import("src/zeit.zig");
+pub usingnamespace @import("zeit.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     _ = b.addModule("zeit", .{
-        .root_source_file = .{ .path = "src/zeit.zig" },
+        .root_source_file = .{ .path = "zeit.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/zeit.zig" },
+        .root_source_file = .{ .path = "zeit.zig" },
         .target = target,
         .optimize = optimize,
     });

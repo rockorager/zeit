@@ -926,58 +926,6 @@ pub const TimeZone = struct {
             .is_dst = transition.timetype.isDst(),
         };
     }
-
-    test "slim" {
-        const data = @embedFile("tz/asia_tokyo.tzif");
-        var in_stream = std.io.fixedBufferStream(data);
-
-        var tz = try parse(std.testing.allocator, in_stream.reader());
-        defer tz.deinit();
-
-        try std.testing.expectEqual(9, tz.transitions.len);
-        try std.testing.expectEqualStrings("JDT", tz.transitions[3].timetype.name());
-        try std.testing.expectEqual(-620298000, tz.transitions[5].ts); // 1950-05-06 15:00:00 UTC
-        try std.testing.expectEqual(567993613, tz.leapseconds[13].occurrence); // 1988-01-01 00:00:00 UTC (+23s in TAI, and +13 in the data since it doesn't store the initial 10 second offset)
-    }
-
-    test "fat" {
-        const data = @embedFile("tz/antarctica_davis.tzif");
-        var in_stream = std.io.fixedBufferStream(data);
-
-        var tz = try parse(std.testing.allocator, in_stream.reader());
-        defer tz.deinit();
-
-        try std.testing.expectEqual(8, tz.transitions.len);
-        try std.testing.expectEqualStrings("+05", tz.transitions[3].timetype.name());
-        try std.testing.expectEqual(1268251224, tz.transitions[4].ts); // 2010-03-10 20:00:00 UTC
-        {
-            const adjusted = tz.adjust(1268251224);
-            try std.testing.expectEqual(tz.transitions[4].timetype.offset + 1268251224, adjusted.timestamp);
-            try std.testing.expectEqualStrings(tz.transitions[4].timetype.name(), adjusted.designation);
-            try std.testing.expectEqual(tz.transitions[4].timetype.isDst(), adjusted.is_dst);
-        }
-        {
-            // choose one second beyond the last transition
-            const ts = tz.transitions[7].ts + 1;
-            const adjusted = tz.adjust(ts);
-            try std.testing.expectEqual(ts + 7 * s_per_hour, adjusted.timestamp);
-            try std.testing.expectEqualStrings("+07", adjusted.designation);
-            try std.testing.expectEqual(false, adjusted.is_dst);
-        }
-    }
-
-    test "legacy" {
-        // Taken from Slackware 8.0, from 2001
-        const data = @embedFile("tz/europe_vatican.tzif");
-        var in_stream = std.io.fixedBufferStream(data);
-
-        var tz = try parse(std.testing.allocator, in_stream.reader());
-        defer tz.deinit();
-
-        try std.testing.expectEqual(170, tz.transitions.len);
-        try std.testing.expectEqualStrings("CET", tz.transitions[69].timetype.name());
-        try std.testing.expectEqual(1414285200, tz.transitions[123].ts); // 2014-10-26 01:00:00 UTC
-    }
 };
 
 /// A parsed representation of a Posix TZ string

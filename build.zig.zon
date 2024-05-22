@@ -3,7 +3,9 @@
     .version = "0.0.0",
     .dependencies = .{},
     .paths = .{
-        "src/zeit.zig",
+        "LICENSE",
+        "zeit.zig",
         "build.zig",
+        "build.zig.zon",
     },
 }

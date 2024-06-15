@@ -90,6 +90,12 @@ pub const Instant = struct {
         /// provided for clarity
         /// Format: YYYY-MM-DDTHH:MM:SS.sss+hh:mm
         rfc3339: []const u8,
+
+        /// Parse a datetime from an RFC5322 date-time spec
+        rfc5322: []const u8,
+
+        /// Parse a datetime from an RFC2822 date-time spec. This is an alias for RFC5322
+        rfc2822: []const u8,
     };
 
     /// convert this Instant to another timezone
@@ -182,11 +188,27 @@ pub fn instant(cfg: Instant.Config) !Instant {
             const t = try Time.fromISO8601(iso);
             break :blk t.instant().timestamp;
         },
+        .rfc2822,
+        .rfc5322,
+        => |eml| blk: {
+            const t = try Time.fromRFC5322(eml);
+            break :blk t.instant().timestamp;
+        },
     };
     return .{
         .timestamp = ts,
         .timezone = cfg.timezone,
     };
+}
+
+test "instant" {
+    const original = Instant{
+        .timestamp = std.time.nanoTimestamp(),
+        .timezone = &utc,
+    };
+    const time = original.time();
+    const round_trip = time.instant();
+    try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
 }
 
 pub const Month = enum(u4) {
@@ -574,14 +596,103 @@ pub const Time = struct {
         }
     }
 
-    test "instant" {
-        const original = Instant{
-            .timestamp = std.time.nanoTimestamp(),
-            .timezone = &utc,
-        };
-        const time = original.time();
-        const round_trip = time.instant();
-        try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
+    pub fn fromRFC5322(eml: []const u8) !Time {
+        const parseInt = std.fmt.parseInt;
+        var time: Time = .{};
+        var i: usize = 0;
+        // day
+        {
+            // consume until a digit
+            while (i < eml.len and !std.ascii.isDigit(eml[i])) : (i += 1) {}
+            const end = std.mem.indexOfScalarPos(u8, eml, i, ' ') orelse return error.InvalidFormat;
+            time.day = try parseInt(u5, eml[i..end], 10);
+            i = end + 1;
+        }
+
+        // month
+        {
+            // consume until an alpha
+            while (i < eml.len and !std.ascii.isAlphabetic(eml[i])) : (i += 1) {}
+            assert(eml.len >= i + 3);
+            var buf: [3]u8 = undefined;
+            buf[0] = std.ascii.toLower(eml[i]);
+            buf[1] = std.ascii.toLower(eml[i + 1]);
+            buf[2] = std.ascii.toLower(eml[i + 2]);
+            time.month = std.meta.stringToEnum(Month, &buf) orelse return error.InvalidFormat;
+            i += 3;
+        }
+
+        // year
+        {
+            // consume until a digit
+            while (i < eml.len and !std.ascii.isDigit(eml[i])) : (i += 1) {}
+            assert(eml.len >= i + 4);
+            time.year = try parseInt(i32, eml[i .. i + 4], 10);
+            i += 4;
+        }
+
+        // hour
+        {
+            // consume until a digit
+            while (i < eml.len and !std.ascii.isDigit(eml[i])) : (i += 1) {}
+            const end = std.mem.indexOfScalarPos(u8, eml, i, ':') orelse return error.InvalidFormat;
+            time.hour = try parseInt(u5, eml[i..end], 10);
+            i = end + 1;
+        }
+        // minute
+        {
+            // consume until a digit
+            while (i < eml.len and !std.ascii.isDigit(eml[i])) : (i += 1) {}
+            assert(i + 2 < eml.len);
+            time.minute = try parseInt(u6, eml[i .. i + 2], 10);
+            i += 2;
+        }
+        // second and zone
+        {
+            assert(i < eml.len);
+            // seconds are optional
+            if (eml[i] == ':') {
+                i += 1;
+                assert(i + 2 < eml.len);
+                time.second = try parseInt(u6, eml[i .. i + 2], 10);
+                i += 2;
+            }
+            // consume whitespace
+            while (i < eml.len and std.ascii.isWhitespace(eml[i])) : (i += 1) {}
+            assert(i + 5 <= eml.len);
+            const hours = try parseInt(i32, eml[i .. i + 3], 10);
+            const minutes = try parseInt(i32, eml[i + 3 .. i + 5], 10);
+            const offset_minutes: i32 = if (hours > 0)
+                hours * 60 + minutes
+            else
+                hours * 60 - minutes;
+            time.offset = offset_minutes * 60;
+        }
+        return time;
+    }
+
+    test "fromRFC5322" {
+        {
+            const time = try Time.fromRFC5322("Thu, 13 Feb 1969 23:32:54 -0330");
+            try std.testing.expectEqual(1969, time.year);
+            try std.testing.expectEqual(.feb, time.month);
+            try std.testing.expectEqual(13, time.day);
+            try std.testing.expectEqual(23, time.hour);
+            try std.testing.expectEqual(32, time.minute);
+            try std.testing.expectEqual(54, time.second);
+            try std.testing.expectEqual(-12_600, time.offset);
+        }
+        {
+            // FWS everywhere
+            const time = try Time.fromRFC5322("  Thu,    13 \tFeb 1969\t\r\n 23:32:54    -0330");
+            try std.testing.expectEqual(1969, time.year);
+            try std.testing.expectEqual(.feb, time.month);
+            try std.testing.expectEqual(13, time.day);
+            try std.testing.expectEqual(23, time.hour);
+            try std.testing.expectEqual(32, time.minute);
+            try std.testing.expectEqual(54, time.second);
+            try std.testing.expectEqual(-12_600, time.offset);
+        }
     }
 
     pub const Format = union(enum) {

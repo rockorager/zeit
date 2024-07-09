@@ -368,7 +368,7 @@ pub const Time = struct {
             .day = self.day,
         });
         return .{
-            .timestamp = days * ns_per_day +
+            .timestamp = @as(i128, days) * ns_per_day +
                 @as(i128, self.hour) * ns_per_hour +
                 @as(i128, self.minute) * ns_per_min +
                 @as(i128, self.second) * ns_per_s +

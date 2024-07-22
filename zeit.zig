@@ -2,6 +2,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
 
+const tz_names = @import("tz_names.zig");
+
+pub const TZName = tz_names.TZName;
+
 const ns_per_us = std.time.ns_per_us;
 const ns_per_ms = std.time.ns_per_ms;
 const ns_per_s = std.time.ns_per_s;
@@ -20,6 +24,10 @@ pub fn local(alloc: std.mem.Allocator) !TimeZone {
     // TODO: consult TZ, make platform portable
     const f = try std.fs.cwd().openFile("/etc/localtime", .{});
     return TimeZone.parse(alloc, f.reader());
+}
+
+pub fn loadTimeZoneFromName(alloc: std.mem.Allocator, name: TZName) !TimeZone {
+    return loadTimeZone(alloc, name.asText());
 }
 
 pub fn loadTimeZone(alloc: std.mem.Allocator, loc: []const u8) !TimeZone {

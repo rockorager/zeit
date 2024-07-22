@@ -13,8 +13,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
     const lib_unit_tests = b.addTest(.{
         .root_source_file = b.path("zeit.zig"),
         .target = target,
@@ -23,9 +21,20 @@ pub fn build(b: *std.Build) void {
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+
+    const gen_step = b.step("generate", "Update timezone names (requires an internet connection)");
+    const gen = b.addExecutable(.{
+        .name = "generate",
+        .root_source_file = b.path("gen/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fmt = b.addFmt(
+        .{ .paths = &.{"tz_names.zig"} },
+    );
+    const gen_run = b.addRunArtifact(gen);
+    fmt.step.dependOn(&gen_run.step);
+    gen_step.dependOn(&fmt.step);
 }

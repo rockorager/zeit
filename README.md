@@ -41,6 +41,11 @@ pub fn main() void {
     const vienna = zeit.loadTimeZone(alloc, "Europe/Vienna");
     defer vienna.deinit();
 
+    // Load a timezone from common names
+    const chitown = zeit.loadTimeZoneFromName(alloc, .@"America/Chicago");
+    defer chitown.deinit();
+
+
     // Parse an Instant from an ISO8601 or RFC3339 string
     const iso = zeit.instant(.{
 	.source = .{

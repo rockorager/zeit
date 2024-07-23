@@ -15,6 +15,7 @@ pub const TimeZone = union(enum) {
     fixed: Fixed,
     posix: Posix,
     tzinfo: TZInfo,
+    windows: Windows,
 
     pub fn adjust(self: TimeZone, timestamp: i64) AdjustedTime {
         return switch (self) {
@@ -699,14 +700,17 @@ pub const TZInfo = struct {
 /// 5. SystemTimeToTzSpecificLocalTimeEx
 pub const Windows = struct {
     const windows = struct {
+        const BOOL = std.os.windows.BOOL;
         const BOOLEAN = std.os.windows.BOOLEAN;
         const DWORD = std.os.windows.DWORD;
+        const FILETIME = std.os.windows.FILETIME;
         const LONG = std.os.windows.LONG;
         const WCHAR = std.os.windows.WCHAR;
         const WINAPI = std.os.windows.WINAPI;
         const WORD = std.os.windows.WORD;
 
-        pub const TIME_ZONE_INVALID = @as(DWORD, std.math.maxInt(DWORD));
+        const epoch = std.time.epoch.windows;
+        pub const TIME_ZONE_ID_INVALID = @as(DWORD, std.math.maxInt(DWORD));
 
         const DYNAMIC_TIME_ZONE_INFORMATION = extern struct {
             Bias: LONG,
@@ -742,18 +746,66 @@ pub const Windows = struct {
         };
 
         pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
+        pub extern "kernel32" fn FileTimeToSystemTime(lpFileTime: *const FILETIME, lpSystemTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
+        pub extern "kernel32" fn SystemTimeToTzSpecificLocalTimeEx(lpTimeZoneInfo: ?*const DYNAMIC_TIME_ZONE_INFORMATION, lpUniversalTime: *const SYSTEMTIME, lpLocalTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
     };
 
     zoneinfo: windows.DYNAMIC_TIME_ZONE_INFORMATION,
+    designation: []const u8,
+    allocator: std.mem.Allocator,
 
     /// retrieves the local timezone settings for this machine
-    pub fn local() !Windows {
+    pub fn local(allocator: std.mem.Allocator) !Windows {
         var info: windows.DYNAMIC_TIME_ZONE_INFORMATION = undefined;
         const result = windows.GetDynamicTimeZoneInformation(&info);
         if (result == windows.TIME_ZONE_ID_INVALID) return error.TimeZoneIdInvalid;
-        return .{ .zoneinfo = info };
+        return .{ .zoneinfo = info, .allocator = allocator, .designation = std.unicode.utf };
+    }
+
+    pub fn adjust(self: Windows, timestamp: i64) AdjustedTime {
+        const instant = zeit.instant(.{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
+        const time = instant.time();
+
+        const systemtime: windows.SYSTEMTIME = .{
+            .wYear = @intCast(time.year),
+            .wMonth = @intFromEnum(time.month),
+            .wDayOfWeek = 0, // not used in calculation
+            .wDay = time.day,
+            .wHour = time.hour,
+            .wMinute = time.minute,
+            .wSecond = time.second,
+            .wMilliseconds = time.millisecond,
+        };
+
+        var localtime: windows.SYSTEMTIME = undefined;
+        if (windows.SystemTimeToTzSpecificLocalTimeEx(&self.zoneinfo, &systemtime, &localtime) == 0) {
+            const err = std.os.windows.kernel32.GetLastError();
+            std.log.err("{}", .{err});
+            @panic("TODO");
+        }
+        const lzt: zeit.Time = .{
+            .year = localtime.wYear,
+            .month = @enumFromInt(localtime.wMonth),
+            .day = @intCast(localtime.wDay),
+            .hour = @intCast(localtime.wHour),
+            .minute = @intCast(localtime.wMinute),
+            .second = @intCast(localtime.wSecond),
+            .millisecond = @intCast(localtime.wMilliseconds),
+        };
+        return .{
+            .designation = "",
+            .timestamp = lzt.instant().unixTimestamp(),
+            .is_dst = false,
+        };
     }
 };
+
+test "timezone.zig: Windows" {
+    const tz = try Windows.local();
+    const adjusted = tz.adjust(0);
+
+    std.log.err("{d}", .{adjusted.timestamp});
+}
 
 test "timezone.zig: test Fixed" {
     const fixed: Fixed = .{

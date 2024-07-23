@@ -27,7 +27,10 @@ pub const utc: TimeZone = .{ .fixed = .{
 
 pub fn local(alloc: std.mem.Allocator) !TimeZone {
     switch (builtin.os.tag) {
-        .windows => @compileError("TODO: windows support"),
+        .windows => {
+            const win = try timezone.Windows.local();
+            return .{ .windows = win };
+        },
         else => {
             // TODO: consult TZ
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});

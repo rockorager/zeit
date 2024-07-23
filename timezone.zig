@@ -693,6 +693,68 @@ pub const TZInfo = struct {
     }
 };
 
+/// In general, the windows API is something like:
+/// 1. GetDynamicTimeZoneInformation
+/// 4. FileTimeToSystemTime to convert a timestamp to a SYSTEMTIME
+/// 5. SystemTimeToTzSpecificLocalTimeEx
+pub const Windows = struct {
+    const windows = struct {
+        const BOOLEAN = std.os.windows.BOOLEAN;
+        const DWORD = std.os.windows.DWORD;
+        const LONG = std.os.windows.LONG;
+        const WCHAR = std.os.windows.WCHAR;
+        const WINAPI = std.os.windows.WINAPI;
+        const WORD = std.os.windows.WORD;
+
+        pub const TIME_ZONE_INVALID = @as(DWORD, std.math.maxInt(DWORD));
+
+        const DYNAMIC_TIME_ZONE_INFORMATION = extern struct {
+            Bias: LONG,
+            StandardName: [32]WCHAR,
+            StandardDate: SYSTEMTIME,
+            StandardBias: LONG,
+            DaylightName: [32]WCHAR,
+            DaylightDate: SYSTEMTIME,
+            DaylightBias: LONG,
+            TimeZoneKeyName: [128]WCHAR,
+            DynamicDaylightTimeDisabled: BOOLEAN,
+        };
+
+        const SYSTEMTIME = extern struct {
+            wYear: WORD,
+            wMonth: WORD,
+            wDayOfWeek: WORD,
+            wDay: WORD,
+            wHour: WORD,
+            wMinute: WORD,
+            wSecond: WORD,
+            wMilliseconds: WORD,
+        };
+
+        const TIME_ZONE_INFORMATION = extern struct {
+            Bias: LONG,
+            StandardName: [32]WCHAR,
+            StandardDate: SYSTEMTIME,
+            StandardBias: LONG,
+            DaylightName: [32]WCHAR,
+            DaylightDate: SYSTEMTIME,
+            DaylightBias: LONG,
+        };
+
+        pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
+    };
+
+    zoneinfo: windows.DYNAMIC_TIME_ZONE_INFORMATION,
+
+    /// retrieves the local timezone settings for this machine
+    pub fn local() !Windows {
+        var info: windows.DYNAMIC_TIME_ZONE_INFORMATION = undefined;
+        const result = windows.GetDynamicTimeZoneInformation(&info);
+        if (result == windows.TIME_ZONE_ID_INVALID) return error.TimeZoneIdInvalid;
+        return .{ .zoneinfo = info };
+    }
+};
+
 test "timezone.zig: test Fixed" {
     const fixed: Fixed = .{
         .name = "test",

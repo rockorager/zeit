@@ -28,7 +28,7 @@ pub const utc: TimeZone = .{ .fixed = .{
 pub fn local(alloc: std.mem.Allocator) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
-            const win = try timezone.Windows.local();
+            const win = try timezone.Windows.local(alloc);
             return .{ .windows = win };
         },
         else => {

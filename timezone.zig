@@ -760,7 +760,7 @@ pub const Windows = struct {
         };
 
         pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
-        pub extern "kernel32" fn GetTimeZoneInformationForYear(wYear: USHORT, pdtzi: ?*const DYNAMIC_TIME_ZONE_INFORMATION, ptzi: *SYSTEMTIME) callconv(WINAPI) BOOL;
+        pub extern "kernel32" fn GetTimeZoneInformationForYear(wYear: USHORT, pdtzi: ?*const DYNAMIC_TIME_ZONE_INFORMATION, ptzi: *TIME_ZONE_INFORMATION) callconv(WINAPI) BOOL;
         pub extern "kernel32" fn SystemTimeToTzSpecificLocalTimeEx(lpTimeZoneInfo: ?*const DYNAMIC_TIME_ZONE_INFORMATION, lpUniversalTime: *const SYSTEMTIME, lpLocalTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
     };
 
@@ -774,8 +774,10 @@ pub const Windows = struct {
         var info: windows.DYNAMIC_TIME_ZONE_INFORMATION = undefined;
         const result = windows.GetDynamicTimeZoneInformation(&info);
         if (result == windows.TIME_ZONE_ID_INVALID) return error.TimeZoneIdInvalid;
-        const standard_name = try std.unicode.utf16LeToUtf8Alloc(allocator, &info.StandardName);
-        const dst_name = try std.unicode.utf16LeToUtf8Alloc(allocator, &info.DaylightName);
+        const std_idx = std.mem.indexOfScalar(u16, &info.StandardName, 0x00) orelse info.StandardName.len;
+        const dst_idx = std.mem.indexOfScalar(u16, &info.DaylightName, 0x00) orelse info.DaylightName.len;
+        const standard_name = try std.unicode.utf16LeToUtf8Alloc(allocator, info.StandardName[0..std_idx]);
+        const dst_name = try std.unicode.utf16LeToUtf8Alloc(allocator, info.DaylightName[0..dst_idx]);
         return .{
             .zoneinfo = info,
             .allocator = allocator,
@@ -902,6 +904,7 @@ pub const Windows = struct {
             }
             return time.wDay >= days;
         }
+        return false;
     }
 };
 
@@ -909,9 +912,12 @@ test "timezone.zig: Windows" {
     if (builtin.os.tag != .windows) return;
     const allocator = std.testing.allocator;
     const tz = try Windows.local(allocator);
-    const adjusted = tz.adjust(0);
+    defer tz.deinit();
+    const now = std.time.timestamp();
+    const adjusted = tz.adjust(now);
 
-    std.log.err("{d}", .{adjusted.timestamp});
+    std.log.err("{}", .{adjusted});
+    std.log.err("{s}", .{adjusted.designation});
 }
 
 test "timezone.zig: test Fixed" {

@@ -724,6 +724,8 @@ pub const Windows = struct {
         const WORD = std.os.windows.WORD;
 
         const epoch = std.time.epoch.windows;
+        const ERROR_SUCCESS = 0x00;
+        const ERROR_NO_MORE_ITEMS = 0x103;
         pub const TIME_ZONE_ID_INVALID = @as(DWORD, std.math.maxInt(DWORD));
 
         const DYNAMIC_TIME_ZONE_INFORMATION = extern struct {
@@ -759,6 +761,7 @@ pub const Windows = struct {
             DaylightBias: LONG,
         };
 
+        // pub extern "apvapi32" fn EnumDynamicTimeZoneInformation(dwIndex: DWORD, lpTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
         pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
         pub extern "kernel32" fn GetTimeZoneInformationForYear(wYear: USHORT, pdtzi: ?*const DYNAMIC_TIME_ZONE_INFORMATION, ptzi: *TIME_ZONE_INFORMATION) callconv(WINAPI) BOOL;
         pub extern "kernel32" fn SystemTimeToTzSpecificLocalTimeEx(lpTimeZoneInfo: ?*const DYNAMIC_TIME_ZONE_INFORMATION, lpUniversalTime: *const SYSTEMTIME, lpLocalTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
@@ -906,19 +909,33 @@ pub const Windows = struct {
         }
         return false;
     }
+
+    pub fn loadFromName(allocator: std.mem.Allocator, name: []const u8) !Windows {
+        _ = allocator;
+        _ = name;
+        @panic("TODO");
+        // const target = try std.unicode.utf8ToUtf16LeAlloc(allocator, name);
+        // defer allocator.free(target);
+        // var result: windows.DWORD = windows.ERROR_SUCCESS;
+        // var i: windows.DWORD = 0;
+        // var dtzi: windows.DYNAMIC_TIME_ZONE_INFORMATION = undefined;
+        // while (result == windows.ERROR_SUCCESS) : (i += 1) {
+        //     result = windows.EnumDynamicTimeZoneInformation(i, &dtzi);
+        //     const name_idx = std.mem.indexOfScalar(u16, &dtzi.TimeZoneKeyName, 0x00) orelse dtzi.TimeZoneKeyName.len;
+        //     if (std.mem.eql(u16, target, dtzi.TimeZoneKeyName[0..name_idx])) break;
+        // } else return error.TimezoneNotFound;
+        // const std_idx = std.mem.indexOfScalar(u16, &dtzi.StandardName, 0x00) orelse dtzi.StandardName.len;
+        // const dst_idx = std.mem.indexOfScalar(u16, &dtzi.DaylightName, 0x00) orelse dtzi.DaylightName.len;
+        // const standard_name = try std.unicode.utf16LeToUtf8Alloc(allocator, dtzi.StandardName[0..std_idx]);
+        // const dst_name = try std.unicode.utf16LeToUtf8Alloc(allocator, dtzi.DaylightName[0..dst_idx]);
+        // return .{
+        //     .zoneinfo = dtzi,
+        //     .allocator = allocator,
+        //     .standard_name = standard_name,
+        //     .dst_name = dst_name,
+        // };
+    }
 };
-
-test "timezone.zig: Windows" {
-    if (builtin.os.tag != .windows) return;
-    const allocator = std.testing.allocator;
-    const tz = try Windows.local(allocator);
-    defer tz.deinit();
-    const now = std.time.timestamp();
-    const adjusted = tz.adjust(now);
-
-    std.log.err("{}", .{adjusted});
-    std.log.err("{s}", .{adjusted.designation});
-}
 
 test "timezone.zig: test Fixed" {
     const fixed: Fixed = .{

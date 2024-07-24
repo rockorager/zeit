@@ -44,6 +44,13 @@ pub fn loadTimeZoneFromName(alloc: std.mem.Allocator, name: TZName) !TimeZone {
 }
 
 pub fn loadTimeZone(alloc: std.mem.Allocator, loc: []const u8) !TimeZone {
+    switch (builtin.os.tag) {
+        .windows => {
+            const tz = try timezone.Windows.loadFromName(alloc, loc);
+            return .{ .windows = tz };
+        },
+        else => {},
+    }
     const zone_dirs = [_][]const u8{
         "/usr/share/zoneinfo/",
         "/usr/share/lib/zoneinfo/",

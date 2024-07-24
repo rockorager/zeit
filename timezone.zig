@@ -15,7 +15,10 @@ pub const TimeZone = union(enum) {
     fixed: Fixed,
     posix: Posix,
     tzinfo: TZInfo,
-    windows: Windows,
+    windows: switch (builtin.os.tag) {
+        .windows => Windows,
+        else => Noop,
+    },
 
     pub fn adjust(self: TimeZone, timestamp: i64) AdjustedTime {
         return switch (self) {
@@ -28,6 +31,7 @@ pub const TimeZone = union(enum) {
             .fixed => {},
             .posix => {},
             .tzinfo => |tz| tz.deinit(),
+            .windows => |tz| tz.deinit(),
         };
     }
 };
@@ -36,6 +40,19 @@ pub const AdjustedTime = struct {
     designation: []const u8,
     timestamp: i64,
     is_dst: bool,
+};
+
+/// A Noop timezone we use for the windows struct when not on windows
+pub const Noop = struct {
+    pub fn adjust(_: Noop, timestamp: i64) AdjustedTime {
+        return .{
+            .designation = "noop",
+            .timestamp = timestamp,
+            .is_dst = false,
+        };
+    }
+
+    pub fn deinit(_: Noop) void {}
 };
 
 /// A fixed timezone
@@ -694,10 +711,6 @@ pub const TZInfo = struct {
     }
 };
 
-/// In general, the windows API is something like:
-/// 1. GetDynamicTimeZoneInformation
-/// 4. FileTimeToSystemTime to convert a timestamp to a SYSTEMTIME
-/// 5. SystemTimeToTzSpecificLocalTimeEx
 pub const Windows = struct {
     const windows = struct {
         const BOOL = std.os.windows.BOOL;
@@ -705,6 +718,7 @@ pub const Windows = struct {
         const DWORD = std.os.windows.DWORD;
         const FILETIME = std.os.windows.FILETIME;
         const LONG = std.os.windows.LONG;
+        const USHORT = std.os.windows.USHORT;
         const WCHAR = std.os.windows.WCHAR;
         const WINAPI = std.os.windows.WINAPI;
         const WORD = std.os.windows.WORD;
@@ -746,22 +760,41 @@ pub const Windows = struct {
         };
 
         pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
-        pub extern "kernel32" fn FileTimeToSystemTime(lpFileTime: *const FILETIME, lpSystemTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
+        pub extern "kernel32" fn GetTimeZoneInformationForYear(wYear: USHORT, pdtzi: ?*const DYNAMIC_TIME_ZONE_INFORMATION, ptzi: *SYSTEMTIME) callconv(WINAPI) BOOL;
         pub extern "kernel32" fn SystemTimeToTzSpecificLocalTimeEx(lpTimeZoneInfo: ?*const DYNAMIC_TIME_ZONE_INFORMATION, lpUniversalTime: *const SYSTEMTIME, lpLocalTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
     };
 
     zoneinfo: windows.DYNAMIC_TIME_ZONE_INFORMATION,
-    designation: []const u8,
     allocator: std.mem.Allocator,
+    standard_name: []const u8,
+    dst_name: []const u8,
 
     /// retrieves the local timezone settings for this machine
     pub fn local(allocator: std.mem.Allocator) !Windows {
         var info: windows.DYNAMIC_TIME_ZONE_INFORMATION = undefined;
         const result = windows.GetDynamicTimeZoneInformation(&info);
         if (result == windows.TIME_ZONE_ID_INVALID) return error.TimeZoneIdInvalid;
-        return .{ .zoneinfo = info, .allocator = allocator, .designation = std.unicode.utf };
+        const standard_name = try std.unicode.utf16LeToUtf8Alloc(allocator, &info.StandardName);
+        const dst_name = try std.unicode.utf16LeToUtf8Alloc(allocator, &info.DaylightName);
+        return .{
+            .zoneinfo = info,
+            .allocator = allocator,
+            .standard_name = standard_name,
+            .dst_name = dst_name,
+        };
     }
 
+    pub fn deinit(self: Windows) void {
+        self.allocator.free(self.standard_name);
+        self.allocator.free(self.dst_name);
+    }
+
+    /// Adjusts the time to the timezone
+    /// 1. Convert timestamp to windows.SYSTEMTIME using internal methods
+    /// 2. Convert SYSTEMTIME to target timezone using windows api
+    /// 3. Get the relevant TIME_ZONE_INFORMATION for the year
+    /// 4. Determine if we are in DST or not
+    /// 5. Return result
     pub fn adjust(self: Windows, timestamp: i64) AdjustedTime {
         const instant = zeit.instant(.{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
         const time = instant.time();
@@ -783,25 +816,99 @@ pub const Windows = struct {
             std.log.err("{}", .{err});
             @panic("TODO");
         }
-        const lzt: zeit.Time = .{
-            .year = localtime.wYear,
-            .month = @enumFromInt(localtime.wMonth),
-            .day = @intCast(localtime.wDay),
-            .hour = @intCast(localtime.wHour),
-            .minute = @intCast(localtime.wMinute),
-            .second = @intCast(localtime.wSecond),
-            .millisecond = @intCast(localtime.wMilliseconds),
-        };
+        var tzi: windows.TIME_ZONE_INFORMATION = undefined;
+        if (windows.GetTimeZoneInformationForYear(localtime.wYear, &self.zoneinfo, &tzi) == 0) {
+            const err = std.os.windows.kernel32.GetLastError();
+            std.log.err("{}", .{err});
+            @panic("TODO");
+        }
+        const is_dst = isDST(timestamp, &tzi, &localtime);
         return .{
-            .designation = "",
-            .timestamp = lzt.instant().unixTimestamp(),
-            .is_dst = false,
+            .designation = if (is_dst) self.dst_name else self.standard_name,
+            .timestamp = systemtimeToUnixTimestamp(localtime),
+            .is_dst = is_dst,
         };
+    }
+
+    fn systemtimeToUnixTimestamp(sys: windows.SYSTEMTIME) i64 {
+        const lzt = systemtimetoZeitTime(sys);
+        return lzt.instant().unixTimestamp();
+    }
+
+    fn systemtimetoZeitTime(sys: windows.SYSTEMTIME) zeit.Time {
+        return .{
+            .year = sys.wYear,
+            .month = @enumFromInt(sys.wMonth),
+            .day = @intCast(sys.wDay),
+            .hour = @intCast(sys.wHour),
+            .minute = @intCast(sys.wMinute),
+            .second = @intCast(sys.wSecond),
+            .millisecond = @intCast(sys.wMilliseconds),
+        };
+    }
+
+    fn isDST(timestamp: i64, tzi: *const windows.TIME_ZONE_INFORMATION, time: *const windows.SYSTEMTIME) bool {
+        // If wMonth on StandardDate is 0, the timezone doesn't have DST
+        if (tzi.StandardDate.wMonth == 0) return false;
+        const start = tzi.DaylightDate;
+        const end = tzi.StandardDate;
+
+        // Before DST starts
+        if (time.wMonth < start.wMonth) return false;
+        // After DST ends
+        if (time.wMonth > end.wMonth) return false;
+        // In the months between
+        if (time.wMonth > start.wMonth and time.wMonth < end.wMonth) return true;
+
+        const days_from_epoch = @divFloor(timestamp, s_per_day);
+        // first_of_month is the weekday on the first of the month
+        const first_of_month = zeit.weekdayFromDays(days_from_epoch - time.wDay + 1);
+
+        // In the start transition month
+        if (time.wMonth == start.wMonth) {
+            // days is the first "rule day" of the month (ie the first
+            // Sunday of the month)
+            var days: u9 = first_of_month.daysUntil(@enumFromInt(start.wDayOfWeek));
+            var i: usize = 1;
+            while (i < start.wDay) : (i += 1) {
+                const month: zeit.Month = @enumFromInt(start.wDay);
+                if (days + 7 >= month.lastDay(time.wYear)) break;
+                days += 7;
+            }
+            if (time.wDay == days) {
+                if (time.wHour == start.wHour) {
+                    return time.wMinute >= start.wMinute;
+                }
+                return time.wHour >= start.wHour;
+            }
+            return time.wDay >= days;
+        }
+        // In the end transition month
+        if (time.wMonth == end.wMonth) {
+            // days is the first "rule day" of the month (ie the first
+            // Sunday of the month)
+            var days: u9 = first_of_month.daysUntil(@enumFromInt(end.wDayOfWeek));
+            var i: usize = 1;
+            while (i < end.wDay) : (i += 1) {
+                const month: zeit.Month = @enumFromInt(end.wDay);
+                if (days + 7 >= month.lastDay(time.wYear)) break;
+                days += 7;
+            }
+            if (time.wDay == days) {
+                if (time.wHour == end.wHour) {
+                    return time.wMinute >= end.wMinute;
+                }
+                return time.wHour >= end.wHour;
+            }
+            return time.wDay >= days;
+        }
     }
 };
 
 test "timezone.zig: Windows" {
-    const tz = try Windows.local();
+    if (builtin.os.tag != .windows) return;
+    const allocator = std.testing.allocator;
+    const tz = try Windows.local(allocator);
     const adjusted = tz.adjust(0);
 
     std.log.err("{d}", .{adjusted.timestamp});

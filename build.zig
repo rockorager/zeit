@@ -32,7 +32,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const fmt = b.addFmt(
-        .{ .paths = &.{"tz_names.zig"} },
+        .{ .paths = &.{"location.zig"} },
     );
     const gen_run = b.addRunArtifact(gen);
     fmt.step.dependOn(&gen_run.step);

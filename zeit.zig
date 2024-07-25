@@ -1,12 +1,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const tz_names = @import("tz_names.zig");
+const location = @import("location.zig");
 pub const timezone = @import("timezone.zig");
 
 const assert = std.debug.assert;
 
 pub const TimeZone = timezone.TimeZone;
-pub const TZName = tz_names.TZName;
+pub const Location = location.Location;
 
 const ns_per_us = std.time.ns_per_us;
 const ns_per_ms = std.time.ns_per_ms;
@@ -39,7 +39,7 @@ pub fn local(alloc: std.mem.Allocator) !TimeZone {
     }
 }
 
-pub fn loadTimeZone(alloc: std.mem.Allocator, loc: TZName) !TimeZone {
+pub fn loadTimeZone(alloc: std.mem.Allocator, loc: Location) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
             const tz = try timezone.Windows.loadFromName(alloc, loc);

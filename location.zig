@@ -1,5 +1,5 @@
 const builtin = @import("builtin");
-pub const TZName = enum {
+pub const Location = enum {
     @"Africa/Abidjan",
     @"Africa/Accra",
     @"Africa/Addis_Ababa",
@@ -450,7 +450,7 @@ pub const TZName = enum {
     @"Pacific/Wake",
     @"Pacific/Wallis",
 
-    pub fn asText(self: TZName) []const u8 {
+    pub fn asText(self: Location) []const u8 {
         switch (builtin.os.tag) {
             .windows => {},
             else => return @tagName(self),

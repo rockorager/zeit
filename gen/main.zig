@@ -58,7 +58,7 @@ pub fn main() !void {
 
     std.mem.sort(MapZone, zones.items, {}, lessThan);
 
-    const out = try std.fs.cwd().createFile("tz_names.zig", .{});
+    const out = try std.fs.cwd().createFile("location.zig", .{});
     defer out.close();
 
     try writeFile(zones.items, out.writer().any());
@@ -77,7 +77,7 @@ const MapZone = struct {
 fn writeFile(items: []const MapZone, writer: std.io.AnyWriter) !void {
     try writer.writeAll(
         \\const builtin = @import("builtin");
-        \\pub const TZName = enum {
+        \\pub const Location = enum {
         \\
     );
     for (items) |item| {
@@ -87,7 +87,7 @@ fn writeFile(items: []const MapZone, writer: std.io.AnyWriter) !void {
     try writer.writeAll("\n");
 
     try writer.writeAll(
-        \\        pub fn asText(self: TZName) []const u8 {
+        \\        pub fn asText(self: Location) []const u8 {
         \\            switch (builtin.os.tag) {
         \\                .windows => {},
         \\                else => return @tagName(self),

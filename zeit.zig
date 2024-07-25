@@ -25,21 +25,57 @@ pub const utc: TimeZone = .{ .fixed = .{
     .is_dst = false,
 } };
 
-pub fn local(alloc: std.mem.Allocator) !TimeZone {
+pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
             const win = try timezone.Windows.local(alloc);
             return .{ .windows = win };
         },
         else => {
-            // TODO: consult TZ
+            if (maybe_env) |env| {
+                if (env.get("TZ")) |tz| {
+                    return localFromEnv(alloc, tz, env);
+                }
+            }
+
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});
             return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
         },
     }
 }
 
-pub fn loadTimeZone(alloc: std.mem.Allocator, loc: Location) !TimeZone {
+// Returns the local time zone from the given TZ environment variable
+// TZ can be one of three things:
+// 1. A POSIX TZ string (TZ=CST6CDT,M3.2.0,M11.1.0)
+// 2. An absolute path, prefixed with ':' (TZ=:/etc/localtime)
+// 3. A relative path, prefixed with ':'
+fn localFromEnv(
+    alloc: std.mem.Allocator,
+    tz: []const u8,
+    env: *const std.process.EnvMap,
+) !TimeZone {
+    assert(tz.len != 0); // TZ is empty string
+
+    // Return early we we are a posix TZ string
+    if (tz[0] != ':') return .{ .posix = try timezone.Posix.parse(tz) };
+
+    assert(tz.len > 1); // TZ not long enough
+    if (tz[1] == '/') {
+        const f = try std.fs.cwd().openFile(tz[1..], .{});
+        return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+    }
+
+    if (std.meta.stringToEnum(Location, tz[1..])) |loc|
+        return loadTimeZone(alloc, loc, env)
+    else
+        return error.UnknownLocation;
+}
+
+pub fn loadTimeZone(
+    alloc: std.mem.Allocator,
+    loc: Location,
+    maybe_env: ?*const std.process.EnvMap,
+) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
             const tz = try timezone.Windows.loadFromName(alloc, loc);
@@ -47,16 +83,29 @@ pub fn loadTimeZone(alloc: std.mem.Allocator, loc: Location) !TimeZone {
         },
         else => {},
     }
-    const zone_dirs = [_][]const u8{
-        "/usr/share/zoneinfo/",
-        "/usr/share/lib/zoneinfo/",
-        "/usr/lib/locale/TZ/",
-        "/etc/zoneinfo",
+
+    var dir: std.fs.Dir = blk: {
+        // If we have an env and a TZDIR, use that
+        if (maybe_env) |env| {
+            if (env.get("TZDIR")) |tzdir| {
+                const dir = try std.fs.openDirAbsolute(tzdir, .{});
+                break :blk dir;
+            }
+        }
+        // Otherwise check well-known locations
+        const zone_dirs = [_][]const u8{
+            "/usr/share/zoneinfo/",
+            "/usr/share/lib/zoneinfo/",
+            "/usr/lib/locale/TZ/",
+            "/share/zoneinfo/",
+            "/etc/zoneinfo/",
+        };
+        for (zone_dirs) |zone_dir| {
+            const dir = std.fs.openDirAbsolute(zone_dir, .{}) catch continue;
+            break :blk dir;
+        } else return error.FileNotFound;
     };
-    var dir: std.fs.Dir = for (zone_dirs) |zone_dir| {
-        const dir = std.fs.openDirAbsolute(zone_dir, .{}) catch continue;
-        break dir;
-    } else return error.NoTimeZone;
+
     defer dir.close();
     const f = try dir.openFile(loc.asText(), .{});
     return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };

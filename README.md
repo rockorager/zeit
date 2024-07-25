@@ -9,11 +9,16 @@ const std = @import("std");
 const zeit = @import("zeit");
 
 pub fn main() void {
+    const allocator = std.heap.page_allocator;
+    var env = try std.process.getEnvMap(allocator);
+    defer env.deinit();
+
     // Get an instant in time. The default gets "now" in UTC
     const now = zeit.instant(.{});
 
-    // Load our local timezone. This needs an allocator
-    const local = zeit.local(alloc);
+    // Load our local timezone. This needs an allocator. Optionally pass in a
+    // *const std.process.EnvMap to support TZ and TZDIR environment variables
+    const local = zeit.local(alloc, &env);
 
     // Convert our instant to a new timezone
     const now_local = now.in(&local);
@@ -37,9 +42,10 @@ pub fn main() void {
     //    .offset = -18000,
     // }
 
-    // Load an arbitrary location using IANA location syntax. The location name comes from an enum
-    // which will automatically map IANA location names to Windows names, as needed
-    const vienna = zeit.loadTimeZone(alloc, .@"Europe/Vienna");
+    // Load an arbitrary location using IANA location syntax. The location name
+    // comes from an enum which will automatically map IANA location names to
+    // Windows names, as needed. Pass an optional EnvMap to support TZDIR
+    const vienna = zeit.loadTimeZone(alloc, .@"Europe/Vienna", &env);
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string

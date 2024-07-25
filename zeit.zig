@@ -39,11 +39,7 @@ pub fn local(alloc: std.mem.Allocator) !TimeZone {
     }
 }
 
-pub fn loadTimeZoneFromName(alloc: std.mem.Allocator, name: TZName) !TimeZone {
-    return loadTimeZone(alloc, name.asText());
-}
-
-pub fn loadTimeZone(alloc: std.mem.Allocator, loc: []const u8) !TimeZone {
+pub fn loadTimeZone(alloc: std.mem.Allocator, loc: TZName) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
             const tz = try timezone.Windows.loadFromName(alloc, loc);
@@ -62,7 +58,7 @@ pub fn loadTimeZone(alloc: std.mem.Allocator, loc: []const u8) !TimeZone {
         break dir;
     } else return error.NoTimeZone;
     defer dir.close();
-    const f = try dir.openFile(loc, .{});
+    const f = try dir.openFile(loc.asText(), .{});
     return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
 }
 

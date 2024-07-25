@@ -37,14 +37,10 @@ pub fn main() void {
     //    .offset = -18000,
     // }
 
-    // Load an arbitrary location using IANA location syntax
-    const vienna = zeit.loadTimeZone(alloc, "Europe/Vienna");
+    // Load an arbitrary location using IANA location syntax. The location name comes from an enum
+    // which will automatically map IANA location names to Windows names, as needed
+    const vienna = zeit.loadTimeZone(alloc, .@"Europe/Vienna");
     defer vienna.deinit();
-
-    // Load a timezone from common names
-    const chitown = zeit.loadTimeZoneFromName(alloc, .@"America/Chicago");
-    defer chitown.deinit();
-
 
     // Parse an Instant from an ISO8601 or RFC3339 string
     const iso = zeit.instant(.{

@@ -4,6 +4,8 @@ A time library written in zig.
 
 ## Usage
 
+[API Documentation](https://rockorager/github.io/zeit/)
+
 ```zig
 const std = @import("std");
 const zeit = @import("zeit");

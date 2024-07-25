@@ -37,4 +37,21 @@ pub fn build(b: *std.Build) void {
     const gen_run = b.addRunArtifact(gen);
     fmt.step.dependOn(&gen_run.step);
     gen_step.dependOn(&fmt.step);
+
+    // Docs
+    {
+        const docs_step = b.step("docs", "Build the vaxis library docs");
+        const docs_obj = b.addObject(.{
+            .name = "zeit",
+            .root_source_file = b.path("zeit.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const docs = docs_obj.getEmittedDocs();
+        docs_step.dependOn(&b.addInstallDirectory(.{
+            .source_dir = docs,
+            .install_dir = .prefix,
+            .install_subdir = "docs",
+        }).step);
+    }
 }

@@ -76,6 +76,9 @@ const MapZone = struct {
 
 fn writeFile(items: []const MapZone, writer: std.io.AnyWriter) !void {
     try writer.writeAll(
+        \\//!This file is generated. Do not edit directly! Run `zig build generate` to update after obtaining
+        \\//!the latest dataset.
+        \\
         \\const builtin = @import("builtin");
         \\pub const Location = enum {
         \\

@@ -1,20 +1,20 @@
 const std = @import("std");
 
 /// Allow the full zeit API to be usable at build time
-pub usingnamespace @import("zeit.zig");
+pub usingnamespace @import("src/zeit.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     _ = b.addModule("zeit", .{
-        .root_source_file = b.path("zeit.zig"),
+        .root_source_file = b.path("src/zeit.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("zeit.zig"),
+        .root_source_file = b.path("src/zeit.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -32,7 +32,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const fmt = b.addFmt(
-        .{ .paths = &.{"location.zig"} },
+        .{ .paths = &.{"src/location.zig"} },
     );
     const gen_run = b.addRunArtifact(gen);
     fmt.step.dependOn(&gen_run.step);
@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
         const docs_step = b.step("docs", "Build the vaxis library docs");
         const docs_obj = b.addObject(.{
             .name = "zeit",
-            .root_source_file = b.path("zeit.zig"),
+            .root_source_file = b.path("src/zeit.zig"),
             .target = target,
             .optimize = optimize,
         });

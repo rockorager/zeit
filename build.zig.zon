@@ -4,10 +4,8 @@
     .dependencies = .{},
     .paths = .{
         "LICENSE",
-        "location.zig",
-        "timezone.zig",
-        "zeit.zig",
         "build.zig",
         "build.zig.zon",
+        "src",
     },
 }

@@ -58,7 +58,7 @@ pub fn main() !void {
 
     std.mem.sort(MapZone, zones.items, {}, lessThan);
 
-    const out = try std.fs.cwd().createFile("location.zig", .{});
+    const out = try std.fs.cwd().createFile("src/location.zig", .{});
     defer out.close();
 
     try writeFile(zones.items, out.writer().any());

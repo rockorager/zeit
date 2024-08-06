@@ -172,7 +172,7 @@ pub const Instant = struct {
     };
 
     /// convert this Instant to another timezone
-    pub fn in(self: Instant, zone: TimeZone) Instant {
+    pub fn in(self: Instant, zone: *const TimeZone) Instant {
         return .{
             .timestamp = self.timestamp,
             .timezone = zone,

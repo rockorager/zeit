@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
 
-    const gen_step = b.step("generate", "Update timezone names (requires an internet connection)");
+    const gen_step = b.step("generate", "Update timezone names");
     const gen = b.addExecutable(.{
         .name = "generate",
         .root_source_file = b.path("gen/main.zig"),

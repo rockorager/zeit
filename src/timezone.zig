@@ -687,7 +687,7 @@ pub const TZInfo = struct {
     pub fn adjust(self: TZInfo, timestamp: i64) AdjustedTime {
         // if we are past the last transition and have a footer, we use the
         // footer data
-        if (self.transitions[self.transitions.len - 1].ts <= timestamp and
+        if ((self.transitions.len == 0 or self.transitions[self.transitions.len - 1].ts <= timestamp) and
             self.posix_tz != null)
         {
             const posix = self.posix_tz.?;

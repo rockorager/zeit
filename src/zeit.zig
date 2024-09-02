@@ -421,6 +421,12 @@ pub const Date = struct {
     day: u5, // 1-31
 };
 
+pub const TimeComparison = enum(u2) {
+    after,
+    before,
+    equal,
+};
+
 pub const Time = struct {
     year: i32 = 1970,
     month: Month = .jan,
@@ -813,6 +819,37 @@ pub const Time = struct {
                 }
             },
         }
+    }
+
+    pub fn compare(self: Time, time: Time) TimeComparison {
+        const self_instant = self.instant();
+        const time_instant = time.instant();
+
+        if (self_instant.timestamp > time_instant.timestamp) {
+            return TimeComparison.after;
+        } else if (self_instant.timestamp < time_instant.timestamp) {
+            return TimeComparison.before;
+        } else {
+            return TimeComparison.equal;
+        }
+    }
+
+    pub fn after(self: Time, time: Time) bool {
+        const self_instant = self.instant();
+        const time_instant = time.instant();
+        return self_instant.timestamp > time_instant.timestamp;
+    }
+
+    pub fn before(self: Time, time: Time) bool {
+        const self_instant = self.instant();
+        const time_instant = time.instant();
+        return self_instant.timestamp < time_instant.timestamp;
+    }
+
+    pub fn equal(self: Time, time: Time) bool {
+        const self_instant = self.instant();
+        const time_instant = time.instant();
+        return self_instant.timestamp == time_instant.timestamp;
     }
 };
 

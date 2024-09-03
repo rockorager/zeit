@@ -826,11 +826,11 @@ pub const Time = struct {
         const time_instant = time.instant();
 
         if (self_instant.timestamp > time_instant.timestamp) {
-            return TimeComparison.after;
+            return .after;
         } else if (self_instant.timestamp < time_instant.timestamp) {
-            return TimeComparison.before;
+            return .before;
         } else {
-            return TimeComparison.equal;
+            return .equal;
         }
     }
 
@@ -846,7 +846,7 @@ pub const Time = struct {
         return self_instant.timestamp < time_instant.timestamp;
     }
 
-    pub fn equal(self: Time, time: Time) bool {
+    pub fn eql(self: Time, time: Time) bool {
         const self_instant = self.instant();
         const time_instant = time.instant();
         return self_instant.timestamp == time_instant.timestamp;

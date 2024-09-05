@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
 
     // Docs
     {
-        const docs_step = b.step("docs", "Build the vaxis library docs");
+        const docs_step = b.step("docs", "Build the zeit docs");
         const docs_obj = b.addObject(.{
             .name = "zeit",
             .root_source_file = b.path("src/zeit.zig"),

@@ -823,6 +823,164 @@ pub const Time = struct {
         }
     }
 
+    pub fn strftime(self: Time, writer: anytype, fmt: []const u8) !void {
+        const inst = self.instant();
+        var i: usize = 0;
+        while (i < fmt.len) {
+            const last = i;
+            i = std.mem.indexOfScalarPos(u8, fmt, i, '%') orelse {
+                try writer.writeAll(fmt[i..]);
+                i = fmt.len;
+                break;
+            };
+            if (i + 1 >= fmt.len) return error.InvalidFormat;
+
+            try writer.writeAll(fmt[last..i]);
+            defer i = i + 2;
+            const b = fmt[i + 1];
+            switch (b) {
+                '%' => try writer.writeByte('%'),
+                'a' => {
+                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const weekday = weekdayFromDays(days);
+                    try writer.writeAll(weekday.shortName());
+                },
+                'A' => {
+                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const weekday = weekdayFromDays(days);
+                    try writer.writeAll(weekday.name());
+                },
+                'b', 'h' => try writer.writeAll(self.month.shortName()),
+                'B' => try writer.writeAll(self.month.name()),
+                'c' => try self.strftime(writer, "%a %b %e %H:%M:%S %Y"), // locale specific
+                'C' => {
+                    if (self.year > 9999 or self.year < -9999) return error.Overflow;
+                    var buf: [5]u8 = undefined;
+                    // year is an i64, which gets printed with a + or a -
+                    _ = try std.fmt.bufPrint(&buf, "{d:0>4}", .{self.year});
+                    try writer.writeAll(buf[1..3]);
+                },
+                'd' => try writer.print("{d:0>2}", .{self.day}),
+                'D' => try self.strftime(writer, "%m/%d/%y"),
+                'e' => try writer.print("{d: >2}", .{self.day}),
+                'F' => try self.strftime(writer, "%Y-%m-%d"),
+                'G' => return error.UnsupportedSpecifier,
+                'g' => return error.UnsupportedSpecifier,
+                'H' => try writer.print("{d:0>2}", .{self.hour}),
+                'I' => {
+                    switch (self.hour) {
+                        0 => try writer.writeAll("12"),
+                        1...12 => try writer.print("{d:0>2}", .{self.hour}),
+                        else => try writer.print("{d:0>2}", .{self.hour - 12}),
+                    }
+                },
+                'j' => {
+                    const before_month = self.month.daysBefore(self.year);
+                    try writer.print("{d:0>3}", .{self.day + before_month});
+                },
+                'k' => try writer.print("{d}", .{self.hour}),
+                'l' => {
+                    const hour = self.hour + 1;
+                    if (hour > 12)
+                        try writer.print("{d}", .{hour -| 12})
+                    else
+                        try writer.print("{d}", .{hour});
+                },
+                'm' => try writer.print("{d:0>2}", .{@intFromEnum(self.month)}),
+                'M' => try writer.print("{d:0>2}", .{self.minute}),
+                'n' => try writer.writeByte('\n'),
+                'O' => return error.UnsupportedSpecifier,
+                'p' => {
+                    if (self.hour >= 12)
+                        try writer.writeAll("PM")
+                    else
+                        try writer.writeAll("AM");
+                },
+                'P' => {
+                    if (self.hour >= 12)
+                        try writer.writeAll("pm")
+                    else
+                        try writer.writeAll("am");
+                },
+                'r' => try self.strftime(writer, "%I:%M:%S %p"),
+                'R' => try self.strftime(writer, "%H:%M"),
+                's' => try writer.print("{d}", .{inst.unixTimestamp()}),
+                'S' => try writer.print("{d:0>2}", .{self.second}),
+                't' => try writer.writeByte('\t'),
+                'T' => try self.strftime(writer, "%H:%M:%S"),
+                'u' => {
+                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const weekday = weekdayFromDays(days);
+                    switch (weekday) {
+                        .sun => try writer.writeByte('7'),
+                        else => try writer.writeByte(@as(u8, @intFromEnum(weekday)) + 0x30),
+                    }
+                },
+                'U' => {
+                    const day_of_year = self.day + self.month.daysBefore(self.year);
+                    // find the date of the first sunday
+                    const weekd_jan_1 = blk: {
+                        const jan_1: Time = .{ .year = self.year, .month = .jan, .day = 1 };
+                        const days = daysSinceEpoch(jan_1.instant().unixTimestamp());
+                        break :blk weekdayFromDays(days);
+                    };
+                    // Day of year of first sunday. This represents the start of week 1
+                    const first_sunday = switch (weekd_jan_1) {
+                        .sun => 1,
+                        else => 7 - @intFromEnum(weekd_jan_1) + 1,
+                    };
+                    if (day_of_year < first_sunday)
+                        try writer.writeAll("00")
+                    else
+                        try writer.print("{d:0>2}", .{(day_of_year + 7 - first_sunday) / 7});
+                },
+                'V' => return error.UnsupportedSpecifier,
+                'w' => {
+                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const weekday = weekdayFromDays(days);
+                    try writer.writeByte(@as(u8, @intFromEnum(weekday)) + 0x30);
+                },
+                'W' => {
+                    const day_of_year = self.day + self.month.daysBefore(self.year);
+                    // find the date of the first sunday
+                    const weekd_jan_1 = blk: {
+                        const jan_1: Time = .{ .year = self.year, .month = .jan, .day = 1 };
+                        const days = daysSinceEpoch(jan_1.instant().unixTimestamp());
+                        break :blk weekdayFromDays(days);
+                    };
+                    // Day of year of first sunday. This represents the start of week 1
+                    const first_monday = switch (weekd_jan_1) {
+                        .sun => 2,
+                        .mon => 1,
+                        else => 7 - @intFromEnum(weekd_jan_1) + 2,
+                    };
+                    if (day_of_year < first_monday)
+                        try writer.writeAll("00")
+                    else
+                        try writer.print("{d:0>2}", .{(day_of_year + 7 - first_monday) / 7});
+                },
+                'x' => try self.strftime(writer, "%m/%d/%y"),
+                'X' => try self.strftime(writer, "%H:%M:%S"),
+                'y' => {
+                    var buf: [16]u8 = undefined;
+                    _ = try std.fmt.bufPrint(&buf, "{d:0>16}", .{self.year});
+                    try writer.writeAll(buf[14..16]);
+                },
+                'Y' => try writer.print("{d}", .{self.year}),
+                'z' => {
+                    const hours = @divTrunc(self.offset, 60 * 60);
+                    const minutes = @abs(@mod(self.offset, 60 * 60)) / 60;
+                    if (hours < 0)
+                        try writer.print("-{d:0>2}{d:0>2}", .{ @abs(hours), minutes })
+                    else
+                        try writer.print("+{d:0>2}{d:0>2}", .{ @abs(hours), minutes });
+                },
+                'Z' => try writer.writeAll(self.designation),
+                else => return error.UnknownSpecifier,
+            }
+        }
+    }
+
     pub fn compare(self: Time, time: Time) TimeComparison {
         const self_instant = self.instant();
         const time_instant = time.instant();
@@ -939,4 +1097,58 @@ pub fn daysFromCivil(date: Date) i64 {
 test {
     std.testing.refAllDecls(@This());
     _ = @import("timezone.zig");
+}
+
+test "fmtStrftime" {
+    var buf: [128]u8 = undefined;
+    const epoch = try instant(.{ .source = .{ .unix_timestamp = 0 } });
+    const time = epoch.time();
+
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+
+    try std.testing.expectError(error.InvalidFormat, time.strftime(writer, "no trailing lone percent %"));
+
+    fbs.reset();
+    try time.strftime(writer, "%%");
+    try std.testing.expectEqualStrings("%", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%a %A %b %B %c %C");
+    try std.testing.expectEqualStrings("Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%d %D %e %F %h");
+    try std.testing.expectEqualStrings("01 01/01/70  1 1970-01-01 Jan", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%H %I %j %k %l %m %M");
+    try std.testing.expectEqualStrings("00 12 001 0 1 01 00", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%p %P %r %R %s %S");
+    try std.testing.expectEqualStrings("AM am 12:00:00 AM 00:00 0 00", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%T %u");
+    try std.testing.expectEqualStrings("00:00:00 4", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%U");
+    try std.testing.expectEqualStrings("00", fbs.getWritten());
+
+    fbs.reset();
+    const d2 = time.instant().add(.{ .days = 3 }).time();
+    try d2.strftime(writer, "%U");
+    try std.testing.expectEqualStrings("01", fbs.getWritten());
+
+    fbs.reset();
+    try time.strftime(writer, "%w %W %x %X %y %Y %z %Z");
+    try std.testing.expectEqualStrings("4 00 01/01/70 00:00:00 70 1970 +0000 UTC", fbs.getWritten());
+
+    fbs.reset();
+    var d3 = time;
+    d3.offset = -3600;
+    try d3.strftime(writer, "%z");
+    try std.testing.expectEqualStrings("-0100", fbs.getWritten());
 }

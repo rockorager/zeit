@@ -853,6 +853,8 @@ pub const Time = struct {
     }
 };
 
+/// Returns the number of days since the Unix epoch. timestamp should be the number of seconds from
+/// the Unix epoch
 pub fn daysSinceEpoch(timestamp: i64) i64 {
     return @divTrunc(timestamp, s_per_day);
 }

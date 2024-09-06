@@ -823,6 +823,7 @@ pub const Time = struct {
         }
     }
 
+    /// Format time using strftime(3) specified, eg %Y-%m-%dT%H:%M:%S
     pub fn strftime(self: Time, writer: anytype, fmt: []const u8) !void {
         const inst = self.instant();
         var i: usize = 0;

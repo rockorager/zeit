@@ -214,6 +214,7 @@ pub const Instant = struct {
             .microsecond = @intCast(micros),
             .nanosecond = @intCast(nanos),
             .offset = @intCast(adjusted.timestamp - self.unixTimestamp()),
+            .designation = adjusted.designation,
         };
     }
 
@@ -438,6 +439,7 @@ pub const Time = struct {
     microsecond: u10 = 0, // 0-999
     nanosecond: u10 = 0, // 0-999
     offset: i32 = 0, // offset from UTC in seconds
+    designation: []const u8 = "",
 
     /// Creates a UTC Instant for this time
     pub fn instant(self: Time) Instant {

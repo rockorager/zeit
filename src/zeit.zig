@@ -870,11 +870,6 @@ pub fn isLeapYear(year: i32) bool {
     // Neri/Schneider algorithm
     const d: i32 = if (@mod(year, 100) != 0) 4 else 16;
     return (year & (d - 1)) == 0;
-    // if (@mod(year, 4) != 0)
-    //     return false;
-    // if (@mod(year, 100) != 0)
-    //     return true;
-    // return (0 == @mod(year, 400));
 }
 
 /// returns the weekday given a number of days since the unix epoch

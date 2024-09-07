@@ -970,17 +970,275 @@ pub const Time = struct {
                 },
                 'Y' => try writer.print("{d}", .{self.year}),
                 'z' => {
-                    const hours = @divTrunc(self.offset, 60 * 60);
-                    const minutes = @abs(@mod(self.offset, 60 * 60)) / 60;
-                    if (hours < 0)
-                        try writer.print("-{d:0>2}{d:0>2}", .{ @abs(hours), minutes })
+                    const hours = absHoursFromSeconds(self.offset);
+                    const minutes = absMinutesFromSeconds(self.offset);
+                    if (self.offset < 0)
+                        try writer.print("-{d:0>2}{d:0>2}", .{ hours, minutes })
                     else
-                        try writer.print("+{d:0>2}{d:0>2}", .{ @abs(hours), minutes });
+                        try writer.print("+{d:0>2}{d:0>2}", .{ hours, minutes });
                 },
                 'Z' => try writer.writeAll(self.designation),
                 else => return error.UnknownSpecifier,
             }
         }
+    }
+
+    /// Format using golang magic date format.
+    pub fn gofmt(self: Time, writer: anytype, fmt: []const u8) !void {
+        const inst = self.instant();
+        var i: usize = 0;
+        while (i < fmt.len) : (i += 1) {
+            const b = fmt[i];
+            switch (b) {
+                'J' => { // Jan, January
+                    if (std.mem.startsWith(u8, fmt[i..], "January")) {
+                        try writer.writeAll(self.month.name());
+                        i += 6;
+                    } else if (std.mem.startsWith(u8, fmt[i..], "Jan")) {
+                        try writer.writeAll(self.month.shortName());
+                        i += 2;
+                    } else try writer.writeByte(b);
+                },
+                'M' => { // Monday, Mon, MST
+                    if (std.mem.startsWith(u8, fmt[i..], "Monday")) {
+                        const days = daysSinceEpoch(inst.unixTimestamp());
+                        const weekday = weekdayFromDays(days);
+                        try writer.writeAll(weekday.name());
+                        i += 5;
+                    } else if (std.mem.startsWith(u8, fmt[i..], "Mon")) {
+                        if (i + 3 >= fmt.len) {
+                            const days = daysSinceEpoch(inst.unixTimestamp());
+                            const weekday = weekdayFromDays(days);
+                            try writer.writeAll(weekday.shortName());
+                            i += 2;
+                        } else if (!std.ascii.isLower(fmt[i + 3])) {
+                            // We only write "Mon" if the next char is *not* a lowercase
+                            const days = daysSinceEpoch(inst.unixTimestamp());
+                            const weekday = weekdayFromDays(days);
+                            try writer.writeAll(weekday.shortName());
+                            i += 2;
+                        }
+                    } else if (std.mem.startsWith(u8, fmt[i..], "MST")) {
+                        try writer.writeAll(self.designation);
+                        i += 2;
+                    } else try writer.writeByte(b);
+                },
+                '0' => { // 01, 02, 03, 04, 05, 06, 002
+                    if (i == fmt.len - 1) {
+                        try writer.writeByte(b);
+                        continue;
+                    }
+                    i += 1;
+                    const b2 = fmt[i];
+                    switch (b2) {
+                        '1' => try writer.print("{d:0>2}", .{@intFromEnum(self.month)}),
+                        '2' => try writer.print("{d:0>2}", .{self.day}),
+                        '3' => {
+                            if (self.hour == 0)
+                                try writer.writeAll("12")
+                            else if (self.hour > 12)
+                                try writer.print("{d:0>2}", .{self.hour - 12})
+                            else
+                                try writer.print("{d:0>2}", .{self.hour});
+                        },
+                        '4' => try writer.print("{d:0>2}", .{self.minute}),
+                        '5' => try writer.print("{d:0>2}", .{self.second}),
+                        '6' => {
+                            var buf: [16]u8 = undefined;
+                            _ = try std.fmt.bufPrint(&buf, "{d:0>16}", .{self.year});
+                            try writer.writeAll(buf[14..16]);
+                        },
+                        else => {
+                            if (std.mem.startsWith(u8, fmt[i..], "02")) {
+                                i += 1;
+                                const before_month = self.month.daysBefore(self.year);
+                                try writer.print("{d:0>3}", .{self.day + before_month});
+                            } else {
+                                try writer.writeByte(b);
+                                try writer.writeByte(b2);
+                            }
+                        },
+                    }
+                },
+                '1' => { // 15, 1
+                    if (std.mem.startsWith(u8, fmt[i..], "15")) {
+                        i += 1;
+                        try writer.print("{d:0>2}", .{self.hour});
+                    } else {
+                        try writer.print("{d}", .{@intFromEnum(self.month)});
+                    }
+                },
+                '2' => { // 2006, 2
+                    if (std.mem.startsWith(u8, fmt[i..], "2006")) {
+                        i += 3;
+                        if (self.year < 0)
+                            try writer.print("{d}", .{self.year})
+                        else
+                            try writer.print("{d}", .{@as(u32, @intCast(self.year))});
+                    } else try writer.print("{d}", .{self.day});
+                },
+                '_' => { // _2, __2
+                    if (std.mem.startsWith(u8, fmt[i..], "_2")) {
+                        i += 1;
+                        try writer.print("{d: >2}", .{self.day});
+                    } else if (std.mem.startsWith(u8, fmt[i..], "__2")) {
+                        i += 2;
+                        const before_month = self.month.daysBefore(self.year);
+                        try writer.print("{d: >3}", .{self.day + before_month});
+                    } else try writer.writeByte(b);
+                },
+                '3' => {
+                    if (self.hour == 0)
+                        try writer.writeAll("12")
+                    else if (self.hour > 12)
+                        try writer.print("{d}", .{self.hour - 12})
+                    else
+                        try writer.print("{d}", .{self.hour});
+                },
+                '4' => try writer.print("{d}", .{self.minute}),
+                '5' => try writer.print("{d}", .{self.second}),
+                'P' => {
+                    if (self.hour >= 12)
+                        try writer.writeAll("PM")
+                    else
+                        try writer.writeAll("AM");
+                },
+                'p' => {
+                    if (self.hour >= 12)
+                        try writer.writeAll("pm")
+                    else
+                        try writer.writeAll("am");
+                },
+                '-', 'Z' => { // -070000, -07:00:00, -0700, -07:00, -07
+                    if (i == fmt.len - 1) {
+                        try writer.writeByte(b);
+                        continue;
+                    }
+                    if (std.mem.startsWith(u8, fmt[i + 1 ..], "070000")) {
+                        i += 6;
+                        if (self.offset == 0 and b == 'Z') {
+                            try writer.writeByte('Z');
+                            continue;
+                        }
+                        const hours = absHoursFromSeconds(self.offset);
+                        const minutes = absMinutesFromSeconds(self.offset);
+                        const seconds = absSecondsFromSeconds(self.offset);
+                        const sign: u8 = if (self.offset < 0) '-' else '+';
+                        try writer.print("{c}{d:0>2}{d:0>2}{d:0>2}", .{ sign, hours, minutes, seconds });
+                    } else if (std.mem.startsWith(u8, fmt[i + 1 ..], "07:00:00")) {
+                        i += 8;
+                        if (self.offset == 0 and b == 'Z') {
+                            try writer.writeByte('Z');
+                            continue;
+                        }
+                        const hours = absHoursFromSeconds(self.offset);
+                        const minutes = absMinutesFromSeconds(self.offset);
+                        const seconds = absSecondsFromSeconds(self.offset);
+                        const sign: u8 = if (self.offset < 0) '-' else '+';
+                        try writer.print("{c}{d:0>2}:{d:0>2}:{d:0>2}", .{ sign, hours, minutes, seconds });
+                    } else if (std.mem.startsWith(u8, fmt[i + 1 ..], "0700")) {
+                        i += 4;
+                        if (self.offset == 0 and b == 'Z') {
+                            try writer.writeByte('Z');
+                            continue;
+                        }
+                        const hours = absHoursFromSeconds(self.offset);
+                        const minutes = absMinutesFromSeconds(self.offset);
+                        const sign: u8 = if (self.offset < 0) '-' else '+';
+                        try writer.print("{c}{d:0>2}{d:0>2}", .{ sign, hours, minutes });
+                    } else if (std.mem.startsWith(u8, fmt[i + 1 ..], "07:00")) {
+                        i += 5;
+                        if (self.offset == 0 and b == 'Z') {
+                            try writer.writeByte('Z');
+                            continue;
+                        }
+                        const hours = absHoursFromSeconds(self.offset);
+                        const minutes = absMinutesFromSeconds(self.offset);
+                        const sign: u8 = if (self.offset < 0) '-' else '+';
+                        try writer.print("{c}{d:0>2}:{d:0>2}", .{ sign, hours, minutes });
+                    } else if (std.mem.startsWith(u8, fmt[i + 1 ..], "07")) {
+                        i += 2;
+                        if (self.offset == 0 and b == 'Z') {
+                            try writer.writeByte('Z');
+                            continue;
+                        }
+                        const hours = absHoursFromSeconds(self.offset);
+                        const sign: u8 = if (self.offset < 0) '-' else '+';
+                        try writer.print("{c}{d:0>2}", .{ sign, hours });
+                    } else try writer.writeByte(b);
+                },
+                '.', ',' => { // ,000, or .000, or ,999, or .999 - repeated digits for fractional seconds.
+                    try writer.writeByte(b);
+
+                    if (i == fmt.len - 1) continue;
+
+                    i += 1;
+                    switch (fmt[i]) {
+                        '0' => {
+                            var n: usize = 0;
+                            while (i + n < fmt.len and fmt[i + n] == '0') : (n += 1) {}
+                            i += n;
+
+                            var buf: [9]u8 = undefined;
+                            const str = try std.fmt.bufPrint(
+                                &buf,
+                                "{d:0>3}{d:0>3}{d:0>3}",
+                                .{ self.millisecond, self.microsecond, self.nanosecond },
+                            );
+                            try writer.writeAll(str[0..@min(n, str.len)]);
+                            if (n > str.len)
+                                try writer.writeByteNTimes('0', n - str.len);
+                        },
+                        '9' => {
+                            var n: usize = 0;
+                            while (i + n < fmt.len and fmt[i + n] == '9') : (n += 1) {}
+                            i += n;
+
+                            var buf: [9]u8 = undefined;
+                            const str = try std.fmt.bufPrint(
+                                &buf,
+                                "{d:0>3}{d:0>3}{d:0>3}",
+                                .{ self.millisecond, self.microsecond, self.nanosecond },
+                            );
+
+                            var iter = std.mem.reverseIterator(str[0..@min(n, str.len)]);
+                            var last_non_zero = @min(n, str.len);
+                            while (iter.next()) |d| {
+                                if (d != '0') break;
+                                last_non_zero -= 1;
+                            }
+                            try writer.writeAll(str[0..last_non_zero]);
+                        },
+                        else => try writer.writeByte(fmt[i]),
+                    }
+                },
+                else => try writer.writeByte(b),
+            }
+        }
+    }
+
+    fn absHoursFromSeconds(seconds: i64) u32 {
+        if (seconds < 0)
+            return @intCast(@divTrunc(-seconds, 60 * 60))
+        else
+            return @intCast(@divTrunc(seconds, 60 * 60));
+    }
+
+    fn absMinutesFromSeconds(seconds: i64) u32 {
+        const hours = absHoursFromSeconds(seconds);
+        if (seconds < 0)
+            return @intCast(@divTrunc((-seconds) - hours * 3600, 60))
+        else
+            return @intCast(@divTrunc(seconds - hours * 3600, 60));
+    }
+
+    fn absSecondsFromSeconds(seconds: i64) u32 {
+        const hours = absHoursFromSeconds(seconds);
+        const minutes = absMinutesFromSeconds(seconds);
+        if (seconds < 0)
+            return @intCast(@divTrunc((-seconds) - hours * 3600 - minutes * 60, 1))
+        else
+            return @intCast(@divTrunc(seconds - hours * 3600 - minutes * 60, 1));
     }
 
     pub fn compare(self: Time, time: Time) TimeComparison {
@@ -1153,4 +1411,78 @@ test "fmtStrftime" {
     d3.offset = -3600;
     try d3.strftime(writer, "%z");
     try std.testing.expectEqualStrings("-0100", fbs.getWritten());
+}
+
+test "gofmt" {
+    var buf: [128]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+
+    const time: Time = .{
+        .year = 1970,
+        .month = .feb,
+        .day = 3,
+        .designation = "UTC",
+    };
+
+    fbs.reset();
+    try time.gofmt(writer, "Jan January J 01 02 03 04 05 06 002 Jan");
+    try std.testing.expectEqualStrings("Feb February J 02 03 12 00 00 70 034 Feb", fbs.getWritten());
+
+    fbs.reset();
+    try time.gofmt(writer, "Mon Monday MST M 1 15 2 2006 _2 __2 Mon");
+    try std.testing.expectEqualStrings("Tue Tuesday UTC M 2 00 3 1970  3  34 Tue", fbs.getWritten());
+
+    fbs.reset();
+    try time.gofmt(writer, "3 4 5");
+    try std.testing.expectEqualStrings("12 0 0", fbs.getWritten());
+
+    const time2: Time = .{
+        .offset = 3661, // 1 hour, 1 minute, 1 second
+        .millisecond = 123,
+        .microsecond = 456,
+        .nanosecond = 789,
+    };
+
+    fbs.reset();
+    try time2.gofmt(writer, "-070000 -07:00:00 -0700 -07:00 -07 -00");
+    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 -00", fbs.getWritten());
+
+    fbs.reset();
+    try time2.gofmt(writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
+    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 Z00", fbs.getWritten());
+
+    fbs.reset();
+    try time.gofmt(writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
+    try std.testing.expectEqualStrings("Z Z Z Z Z Z00", fbs.getWritten());
+
+    fbs.reset();
+    try time2.gofmt(writer, "frac .");
+    try std.testing.expectEqualStrings("frac .", fbs.getWritten());
+
+    fbs.reset();
+    try time2.gofmt(writer, "frac .000000000");
+    try std.testing.expectEqualStrings("frac .123456789", fbs.getWritten());
+
+    fbs.reset();
+    try time2.gofmt(writer, "frac .999999999");
+    try std.testing.expectEqualStrings("frac .123456789", fbs.getWritten());
+
+    fbs.reset();
+    try time2.gofmt(writer, "frac .000000000000");
+    try std.testing.expectEqualStrings("frac .123456789000", fbs.getWritten());
+
+    fbs.reset();
+    try time2.gofmt(writer, "frac .0000000");
+    try std.testing.expectEqualStrings("frac .1234567", fbs.getWritten());
+
+    const time3: Time = .{
+        .offset = 3661, // 1 hour, 1 minute, 1 second
+        .millisecond = 123,
+        .microsecond = 456,
+    };
+
+    fbs.reset();
+    try time3.gofmt(writer, "frac .999999999");
+    try std.testing.expectEqualStrings("frac .123456", fbs.getWritten());
 }

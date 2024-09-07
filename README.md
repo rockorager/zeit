@@ -44,6 +44,12 @@ pub fn main() void {
     //    .offset = -18000,
     // }
 
+    // Format using strftime specifier. Format strings are not required to be comptime
+    try dt.strftime(anywriter, "%Y-%m-%d %H:%M:%S %Z");
+
+    // Or...golang magic date specifiers. Format strings are not required to be comptime
+    try dt.gofmt(anywriter, "2006-01-02 15:04:05 MST");
+
     // Load an arbitrary location using IANA location syntax. The location name
     // comes from an enum which will automatically map IANA location names to
     // Windows names, as needed. Pass an optional EnvMap to support TZDIR

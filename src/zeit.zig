@@ -864,6 +864,7 @@ pub const Time = struct {
                 'd' => try writer.print("{d:0>2}", .{self.day}),
                 'D' => try self.strftime(writer, "%m/%d/%y"),
                 'e' => try writer.print("{d: >2}", .{self.day}),
+                'f' => try writer.print("{d:0>3}{d:0>3", .{ self.millisecond, self.microsecond }),
                 'F' => try self.strftime(writer, "%Y-%m-%d"),
                 'G' => return error.UnsupportedSpecifier,
                 'g' => return error.UnsupportedSpecifier,

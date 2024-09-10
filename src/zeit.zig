@@ -1431,7 +1431,7 @@ test "fmtStrftime" {
     try std.testing.expectEqualStrings("00", fbs.getWritten());
 
     fbs.reset();
-    const d2 = time.instant().add(.{ .days = 3 }).time();
+    const d2 = (try time.instant().add(.{ .days = 3 })).time();
     try d2.strftime(writer, "%U");
     try std.testing.expectEqualStrings("01", fbs.getWritten());
 

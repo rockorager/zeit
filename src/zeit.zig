@@ -78,7 +78,7 @@ pub fn loadTimeZone(
 ) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
-            const tz = try timezone.Windows.loadFromName(alloc, loc);
+            const tz = try timezone.Windows.loadFromName(alloc, loc.asText());
             return .{ .windows = tz };
         },
         else => {},

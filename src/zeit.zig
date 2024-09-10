@@ -219,31 +219,29 @@ pub const Instant = struct {
     }
 
     /// add the duration to the Instant
-    pub fn add(self: Instant, duration: Duration) Instant {
-        const ns = duration.days * ns_per_day +
-            duration.hours * ns_per_hour +
-            duration.minutes * ns_per_min +
-            duration.seconds * ns_per_s +
-            duration.milliseconds * ns_per_ms +
-            duration.microseconds * ns_per_us +
-            duration.nanoseconds;
+    pub fn add(self: Instant, duration: Duration) error{Overflow}!Instant {
+        const ns = try duration.inNanoseconds();
+
+        // check for addition with overflow
+        const timestamp = @addWithOverflow(self.timestamp, ns);
+        if (timestamp[1] == 1) return error.Overflow;
+
         return .{
-            .timestamp = self.timestamp + ns,
+            .timestamp = timestamp[0],
             .timezone = self.timezone,
         };
     }
 
     /// subtract the duration from the Instant
-    pub fn subtract(self: Instant, duration: Duration) Instant {
-        const ns = duration.days * ns_per_day +
-            duration.hours * ns_per_hour +
-            duration.minutes * ns_per_min +
-            duration.seconds * ns_per_s +
-            duration.milliseconds * ns_per_ms +
-            duration.microseconds * ns_per_us +
-            duration.nanoseconds;
+    pub fn subtract(self: Instant, duration: Duration) error{Overflow}!Instant {
+        const ns = try duration.inNanoseconds();
+
+        // check for subtraction with overflow
+        const timestamp = @subWithOverflow(self.timestamp, ns);
+        if (timestamp[1] == 1) return error.Overflow;
+
         return .{
-            .timestamp = self.timestamp - ns,
+            .timestamp = timestamp[0],
             .timezone = self.timezone,
         };
     }
@@ -374,6 +372,41 @@ pub const Duration = struct {
     milliseconds: usize = 0,
     microseconds: usize = 0,
     nanoseconds: usize = 0,
+
+    /// duration expressed as the total number of nanoseconds
+    pub fn inNanoseconds(self: Duration) error{Overflow}!usize {
+        // check for multiplication with overflow
+        const days_in_ns = @mulWithOverflow(self.days, ns_per_day);
+        const hours_in_ns = @mulWithOverflow(self.hours, ns_per_hour);
+        const minutes_in_ns = @mulWithOverflow(self.minutes, ns_per_min);
+        const seconds_in_ns = @mulWithOverflow(self.seconds, ns_per_s);
+        const milliseconds_in_ns = @mulWithOverflow(self.milliseconds, ns_per_ms);
+        const microseconds_in_ns = @mulWithOverflow(self.microseconds, ns_per_us);
+        if (days_in_ns[1] == 1 or
+            hours_in_ns[1] == 1 or
+            minutes_in_ns[1] == 1 or
+            seconds_in_ns[1] == 1 or
+            milliseconds_in_ns[1] == 1 or
+            microseconds_in_ns[1] == 1) return error.Overflow;
+
+        // check for addition with overflow
+        var ns = days_in_ns[0];
+        const components = [_]usize{
+            hours_in_ns[0],
+            minutes_in_ns[0],
+            seconds_in_ns[0],
+            milliseconds_in_ns[0],
+            microseconds_in_ns[0],
+            self.nanoseconds,
+        };
+        for (components) |value| {
+            const sum_with_overflow = @addWithOverflow(ns, value);
+            if (sum_with_overflow[1] == 1) return error.Overflow;
+            ns = sum_with_overflow[0];
+        }
+
+        return ns;
+    }
 };
 
 pub const Weekday = enum(u3) {

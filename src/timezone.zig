@@ -396,7 +396,7 @@ pub const Posix = struct {
                 const first_of_month = zeit.weekdayFromDays(days_from_epoch - civil.day + 1);
                 // days is the first "rule day" of the month (ie the first
                 // Sunday of the month)
-                var days: u9 = first_of_month.daysUntil(rule.day);
+                var days: u9 = first_of_month.daysUntil(rule.day) + 1;
                 var i: usize = 1;
                 while (i < rule.week) : (i += 1) {
                     if (days + 7 >= rule.month.lastDay(civil.year)) break;
@@ -434,7 +434,7 @@ pub const Posix = struct {
                 const first_of_month = zeit.weekdayFromDays(days_from_epoch - civil.day + 1);
                 // days is the first "rule day" of the month (ie the first
                 // Sunday of the month)
-                var days: u9 = first_of_month.daysUntil(rule.day);
+                var days: u9 = first_of_month.daysUntil(rule.day) + 1;
                 var i: usize = 1;
                 while (i < rule.week) : (i += 1) {
                     if (days + 7 >= rule.month.lastDay(civil.year)) break;

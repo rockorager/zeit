@@ -420,7 +420,7 @@ pub const Weekday = enum(u3) {
 
     /// number of days from self until other. Returns 0 when self == other
     pub fn daysUntil(self: Weekday, other: Weekday) u3 {
-        const d = @intFromEnum(other) -% @intFromEnum(self);
+        const d: u8 = @as(u8, @intFromEnum(other)) -% @as(u8, @intFromEnum(self));
         return if (d <= 6) @intCast(d) else @intCast(d +% 7);
     }
 
@@ -446,6 +446,8 @@ pub const Weekday = enum(u3) {
         const wed: Weekday = .wed;
         try std.testing.expectEqual(0, wed.daysUntil(.wed));
         try std.testing.expectEqual(6, wed.daysUntil(.tue));
+        try std.testing.expectEqual(5, wed.daysUntil(.mon));
+        try std.testing.expectEqual(4, wed.daysUntil(.sun));
     }
 };
 

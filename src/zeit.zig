@@ -917,11 +917,11 @@ pub const Time = struct {
                 },
                 'k' => try writer.print("{d}", .{self.hour}),
                 'l' => {
-                    const hour = self.hour + 1;
-                    if (hour > 12)
-                        try writer.print("{d}", .{hour -| 12})
-                    else
-                        try writer.print("{d}", .{hour});
+                    switch (self.hour) {
+                        0 => try writer.writeAll("12"),
+                        1...12 => try writer.print("{d}", .{self.hour}),
+                        else => try writer.print("{d}", .{self.hour - 12}),
+                    }
                 },
                 'm' => try writer.print("{d:0>2}", .{@intFromEnum(self.month)}),
                 'M' => try writer.print("{d:0>2}", .{self.minute}),
@@ -1418,7 +1418,7 @@ test "fmtStrftime" {
 
     fbs.reset();
     try time.strftime(writer, "%H %I %j %k %l %m %M");
-    try std.testing.expectEqualStrings("00 12 001 0 1 01 00", fbs.getWritten());
+    try std.testing.expectEqualStrings("00 12 001 0 12 01 00", fbs.getWritten());
 
     fbs.reset();
     try time.strftime(writer, "%p %P %r %R %s %S");

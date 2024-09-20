@@ -16,11 +16,11 @@ pub fn main() void {
     defer env.deinit();
 
     // Get an instant in time. The default gets "now" in UTC
-    const now = zeit.instant(.{});
+    const now = try zeit.instant(.{});
 
     // Load our local timezone. This needs an allocator. Optionally pass in a
     // *const std.process.EnvMap to support TZ and TZDIR environment variables
-    const local = zeit.local(alloc, &env);
+    const local = try zeit.local(alloc, &env);
 
     // Convert our instant to a new timezone
     const now_local = now.in(&local);
@@ -53,17 +53,17 @@ pub fn main() void {
     // Load an arbitrary location using IANA location syntax. The location name
     // comes from an enum which will automatically map IANA location names to
     // Windows names, as needed. Pass an optional EnvMap to support TZDIR
-    const vienna = zeit.loadTimeZone(alloc, .@"Europe/Vienna", &env);
+    const vienna = try zeit.loadTimeZone(alloc, .@"Europe/Vienna", &env);
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string
-    const iso = zeit.instant(.{
+    const iso = try zeit.instant(.{
 	.source = .{
 	    .iso8601 = "2024-03-16T08:38:29.496-1200",
 	},
     });
 
-    const rfc3339 = zeit.instant(.{
+    const rfc3339 = try zeit.instant(.{
 	.source = .{
 	    .rfc3339 = "2024-03-16T08:38:29.496706064-1200",
 	},

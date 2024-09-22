@@ -108,6 +108,7 @@ pub fn loadTimeZone(
 
     defer dir.close();
     const f = try dir.openFile(loc.asText(), .{});
+    defer f.close();
     return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
 }
 

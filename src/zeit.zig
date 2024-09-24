@@ -1312,12 +1312,14 @@ pub const Time = struct {
 /// Returns the number of days since the Unix epoch. timestamp should be the number of seconds from
 /// the Unix epoch
 pub fn daysSinceEpoch(timestamp: i64) i64 {
-    return @divTrunc(timestamp, s_per_day);
+    return @divFloor(timestamp, s_per_day);
 }
 
 test "days since epoch" {
     try std.testing.expectEqual(0, daysSinceEpoch(0));
-    try std.testing.expectEqual(-1, daysSinceEpoch(-(s_per_day + 1)));
+    try std.testing.expectEqual(0, daysSinceEpoch(1));
+    try std.testing.expectEqual(-1, daysSinceEpoch(-1));
+    try std.testing.expectEqual(-2, daysSinceEpoch(-(s_per_day + 1)));
     try std.testing.expectEqual(1, daysSinceEpoch(s_per_day + 1));
     try std.testing.expectEqual(19797, daysSinceEpoch(1710523947));
 }

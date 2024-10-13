@@ -50,6 +50,10 @@ pub fn main() void {
     // Or...golang magic date specifiers. Format strings are not required to be comptime
     try dt.gofmt(anywriter, "2006-01-02 15:04:05 MST");
 
+    // Format using strftime straight to buffer.
+    var buf: [128]u8 = undefined;
+    const formatted_date_string = try dt.bufStrftime(buf, "%Y-%m-%d %H:%M:%S %Z");
+
     // Load an arbitrary location using IANA location syntax. The location name
     // comes from an enum which will automatically map IANA location names to
     // Windows names, as needed. Pass an optional EnvMap to support TZDIR

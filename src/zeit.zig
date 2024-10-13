@@ -1019,6 +1019,18 @@ pub const Time = struct {
         }
     }
 
+    /// Format time using strftime(3) specified, eg %Y-%m-%dT%H:%M:%S, to buffer.
+    /// Convenience wrapper around strftime.
+    /// Returns a slice of the buffer written to.
+    pub fn bufStrftime(self: Time, buf: []u8, fmt: []const u8) ![]u8 {
+        var fbs = std.io.fixedBufferStream(buf);
+        const writer = fbs.writer().any();
+
+        try self.strftime(writer, fmt);
+
+        return fbs.getWritten();
+    }
+
     /// Format using golang magic date format.
     pub fn gofmt(self: Time, writer: anytype, fmt: []const u8) !void {
         const inst = self.instant();
@@ -1395,6 +1407,48 @@ pub fn daysFromCivil(date: Date) i64 {
 test {
     std.testing.refAllDecls(@This());
     _ = @import("timezone.zig");
+}
+
+test "bufFmtStrftime" {
+    var buf: [128]u8 = undefined;
+
+    const epoch = try instant(.{ .source = .{ .unix_timestamp = 0 } });
+    const time = epoch.time();
+
+    try std.testing.expectError(error.InvalidFormat, time.bufStrftime(&buf, "no trailing lone percent %"));
+
+    const r1 = try time.bufStrftime(&buf, "%%");
+    try std.testing.expectEqualStrings("%", r1);
+
+    const r2 = try time.bufStrftime(&buf, "%a %A %b %B %c %C");
+    try std.testing.expectEqualStrings("Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19", r2);
+
+    const r3 = try time.bufStrftime(&buf, "%d %D %e %F %h");
+    try std.testing.expectEqualStrings("01 01/01/70  1 1970-01-01 Jan", r3);
+
+    const r4 = try time.bufStrftime(&buf, "%H %I %j %k %l %m %M");
+    try std.testing.expectEqualStrings("00 12 001 0 12 01 00", r4);
+
+    const r5 = try time.bufStrftime(&buf, "%p %P %r %R %s %S");
+    try std.testing.expectEqualStrings("AM am 12:00:00 AM 00:00 0 00", r5);
+
+    const r6 = try time.bufStrftime(&buf, "%T %u");
+    try std.testing.expectEqualStrings("00:00:00 4", r6);
+
+    const r7 = try time.bufStrftime(&buf, "%U");
+    try std.testing.expectEqualStrings("00", r7);
+
+    const d2 = (try time.instant().add(.{ .days = 3 })).time();
+    const r8 = try d2.bufStrftime(&buf, "%U");
+    try std.testing.expectEqualStrings("01", r8);
+
+    const r9 = try time.bufStrftime(&buf, "%w %W %x %X %y %Y %z %Z");
+    try std.testing.expectEqualStrings("4 00 01/01/70 00:00:00 70 1970 +0000 UTC", r9);
+
+    var d3 = time;
+    d3.offset = -3600;
+    const r10 = try d3.bufStrftime(&buf, "%z");
+    try std.testing.expectEqualStrings("-0100", r10);
 }
 
 test "fmtStrftime" {

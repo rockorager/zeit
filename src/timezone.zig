@@ -452,19 +452,18 @@ pub const Posix = struct {
     }
 
     pub fn adjust(self: Posix, timestamp: i64) AdjustedTime {
-        if (self.dst) |dst| {
+        if (self.isDST(timestamp)) {
             return .{
-                .designation = dst,
+                .designation = self.dst orelse self.std,
                 .timestamp = timestamp - (self.dst_offset orelse self.std_offset - s_per_hour),
                 .is_dst = true,
             };
-        } else {
-            return .{
-                .designation = self.std,
-                .timestamp = timestamp - self.std_offset,
-                .is_dst = false,
-            };
         }
+        return .{
+            .designation = self.std,
+            .timestamp = timestamp - self.std_offset,
+            .is_dst = false,
+        };
     }
 };
 
@@ -1060,9 +1059,22 @@ test "timezone.zig: Posix.parse" {
 }
 
 test "timezone.zig: Posix.adjust" {
-    const t = try Posix.parse("UTC+1");
-    const adjusted = t.adjust(0);
-    try std.testing.expectEqual(-3600, adjusted.timestamp);
+    {
+        const t = try Posix.parse("UTC+1");
+        const adjusted = t.adjust(0);
+        try std.testing.expectEqual(-3600, adjusted.timestamp);
+    }
+
+    {
+        const t = try Posix.parse("CST6CDT,M3.2.0/2:00:00,M11.1.0/2:00:00");
+        const adjusted = t.adjust(1704088800);
+        try std.testing.expectEqual(1704067200, adjusted.timestamp);
+        try std.testing.expectEqualStrings("CST", adjusted.designation);
+
+        const adjusted_dst = t.adjust(1710057600);
+        try std.testing.expectEqual(1710039600, adjusted_dst.timestamp);
+        try std.testing.expectEqualStrings("CDT", adjusted_dst.designation);
+    }
 }
 
 test "timezone.zig: Posix.DSTSpec.parse" {

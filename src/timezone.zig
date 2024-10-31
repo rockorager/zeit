@@ -900,11 +900,11 @@ pub const Windows = struct {
             }
             if (time.wDay == days) {
                 if (time.wHour == end.wHour) {
-                    return time.wMinute >= end.wMinute;
+                    return time.wMinute < end.wMinute;
                 }
-                return time.wHour >= end.wHour;
+                return time.wHour < end.wHour;
             }
-            return time.wDay >= days;
+            return time.wDay < days;
         }
         return false;
     }

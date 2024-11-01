@@ -8,6 +8,10 @@ const assert = std.debug.assert;
 pub const TimeZone = timezone.TimeZone;
 pub const Location = location.Location;
 
+pub const Days = i64;
+pub const Nanoseconds = i128;
+pub const Seconds = i64;
+
 const ns_per_us = std.time.ns_per_us;
 const ns_per_ms = std.time.ns_per_ms;
 const ns_per_s = std.time.ns_per_s;
@@ -116,7 +120,7 @@ pub fn loadTimeZone(
 /// always carry with them a timezone.
 pub const Instant = struct {
     /// the instant of time, in nanoseconds
-    timestamp: i128,
+    timestamp: Nanoseconds = 0,
     /// every instant occurs in a timezone. This is the timezone
     timezone: *const TimeZone,
 
@@ -131,10 +135,10 @@ pub const Instant = struct {
         now,
 
         /// a specific unix timestamp (in seconds)
-        unix_timestamp: i64,
+        unix_timestamp: Seconds,
 
         /// a specific unix timestamp (in nanoseconds)
-        unix_nano: i128,
+        unix_nano: Nanoseconds,
 
         /// create an Instant from a calendar date and time
         time: Time,
@@ -181,7 +185,7 @@ pub const Instant = struct {
     }
 
     // convert the nanosecond timestamp into a unix timestamp (in seconds)
-    pub fn unixTimestamp(self: Instant) i64 {
+    pub fn unixTimestamp(self: Instant) Seconds {
         return @intCast(@divFloor(self.timestamp, ns_per_s));
     }
 
@@ -250,7 +254,7 @@ pub const Instant = struct {
 
 /// create a new Instant
 pub fn instant(cfg: Instant.Config) !Instant {
-    const ts: i128 = switch (cfg.source) {
+    const ts: Nanoseconds = switch (cfg.source) {
         .now => std.time.nanoTimestamp(),
         .unix_timestamp => |unix| unix * ns_per_s,
         .unix_nano => |nano| nano,
@@ -375,7 +379,7 @@ pub const Duration = struct {
     nanoseconds: usize = 0,
 
     /// duration expressed as the total number of nanoseconds
-    pub fn inNanoseconds(self: Duration) error{Overflow}!usize {
+    pub fn inNanoseconds(self: Duration) error{Overflow}!u64 {
         // check for multiplication with overflow
         const days_in_ns = @mulWithOverflow(self.days, ns_per_day);
         const hours_in_ns = @mulWithOverflow(self.hours, ns_per_hour);
@@ -1253,14 +1257,14 @@ pub const Time = struct {
         }
     }
 
-    fn absHoursFromSeconds(seconds: i64) u32 {
+    fn absHoursFromSeconds(seconds: Seconds) u32 {
         if (seconds < 0)
             return @intCast(@divTrunc(-seconds, 60 * 60))
         else
             return @intCast(@divTrunc(seconds, 60 * 60));
     }
 
-    fn absMinutesFromSeconds(seconds: i64) u32 {
+    fn absMinutesFromSeconds(seconds: Seconds) u32 {
         const hours = absHoursFromSeconds(seconds);
         if (seconds < 0)
             return @intCast(@divTrunc((-seconds) - hours * 3600, 60))
@@ -1268,7 +1272,7 @@ pub const Time = struct {
             return @intCast(@divTrunc(seconds - hours * 3600, 60));
     }
 
-    fn absSecondsFromSeconds(seconds: i64) u32 {
+    fn absSecondsFromSeconds(seconds: Seconds) u32 {
         const hours = absHoursFromSeconds(seconds);
         const minutes = absMinutesFromSeconds(seconds);
         if (seconds < 0)
@@ -1311,7 +1315,7 @@ pub const Time = struct {
 
 /// Returns the number of days since the Unix epoch. timestamp should be the number of seconds from
 /// the Unix epoch
-pub fn daysSinceEpoch(timestamp: i64) i64 {
+pub fn daysSinceEpoch(timestamp: Seconds) Days {
     return @divFloor(timestamp, s_per_day);
 }
 
@@ -1332,7 +1336,7 @@ pub fn isLeapYear(year: i32) bool {
 
 /// returns the weekday given a number of days since the unix epoch
 /// https://howardhinnant.github.io/date_algorithms.html#weekday_from_days
-pub fn weekdayFromDays(days: i64) Weekday {
+pub fn weekdayFromDays(days: Days) Weekday {
     if (days >= -4)
         return @enumFromInt(@mod((days + 4), 7))
     else
@@ -1346,7 +1350,7 @@ test "weekdayFromDays" {
 /// return the civil date from the number of days since the epoch
 /// This is an implementation of Howard Hinnant's algorithm
 /// https://howardhinnant.github.io/date_algorithms.html#civil_from_days
-pub fn civilFromDays(days: i64) Date {
+pub fn civilFromDays(days: Days) Date {
     // shift epoch from 1970-01-01 to 0000-03-01
     const z = days + 719468;
 
@@ -1378,7 +1382,7 @@ pub fn civilFromDays(days: i64) Date {
     };
 }
 /// return the number of days since the epoch from the civil date
-pub fn daysFromCivil(date: Date) i64 {
+pub fn daysFromCivil(date: Date) Days {
     const m = @intFromEnum(date.month);
     const y = if (m <= 2) date.year - 1 else date.year;
     const era = if (y >= 0) @divFloor(y, 400) else @divFloor(y - 399, 400);

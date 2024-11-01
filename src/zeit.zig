@@ -116,7 +116,7 @@ pub fn loadTimeZone(
 /// always carry with them a timezone.
 pub const Instant = struct {
     /// the instant of time, in nanoseconds
-    timestamp_ns: i128,
+    timestamp: i128,
     /// every instant occurs in a timezone. This is the timezone
     timezone: *const TimeZone,
 
@@ -175,30 +175,30 @@ pub const Instant = struct {
     /// convert this Instant to another timezone
     pub fn in(self: Instant, zone: *const TimeZone) Instant {
         return .{
-            .timestamp_ns = self.timestamp_ns,
+            .timestamp = self.timestamp,
             .timezone = zone,
         };
     }
 
     // convert the nanosecond timestamp into a unix timestamp (in seconds)
     pub fn unixTimestamp(self: Instant) i64 {
-        return @intCast(@divFloor(self.timestamp_ns, ns_per_s));
+        return @intCast(@divFloor(self.timestamp, ns_per_s));
     }
 
     // generate a calendar date and time for this instant
     pub fn time(self: Instant) Time {
         const adjusted = self.timezone.adjust(self.unixTimestamp());
-        const days = daysSinceEpoch(adjusted.timestamp_s);
+        const days = daysSinceEpoch(adjusted.timestamp);
         const date = civilFromDays(days);
 
-        var seconds = @mod(adjusted.timestamp_s, s_per_day);
+        var seconds = @mod(adjusted.timestamp, s_per_day);
         const hours = @divFloor(seconds, s_per_hour);
         seconds -= hours * s_per_hour;
         const minutes = @divFloor(seconds, s_per_min);
         seconds -= minutes * s_per_min;
 
         // get the nanoseconds from the original timestamp
-        var nanos = @mod(self.timestamp_ns, ns_per_s);
+        var nanos = @mod(self.timestamp, ns_per_s);
         const millis = @divFloor(nanos, ns_per_ms);
         nanos -= millis * ns_per_ms;
         const micros = @divFloor(nanos, ns_per_us);
@@ -214,7 +214,7 @@ pub const Instant = struct {
             .millisecond = @intCast(millis),
             .microsecond = @intCast(micros),
             .nanosecond = @intCast(nanos),
-            .offset = @intCast(adjusted.timestamp_s - self.unixTimestamp()),
+            .offset = @intCast(adjusted.timestamp - self.unixTimestamp()),
             .designation = adjusted.designation,
         };
     }
@@ -224,11 +224,11 @@ pub const Instant = struct {
         const ns = try duration.inNanoseconds();
 
         // check for addition with overflow
-        const timestamp = @addWithOverflow(self.timestamp_ns, ns);
+        const timestamp = @addWithOverflow(self.timestamp, ns);
         if (timestamp[1] == 1) return error.Overflow;
 
         return .{
-            .timestamp_ns = timestamp[0],
+            .timestamp = timestamp[0],
             .timezone = self.timezone,
         };
     }
@@ -238,11 +238,11 @@ pub const Instant = struct {
         const ns = try duration.inNanoseconds();
 
         // check for subtraction with overflow
-        const timestamp = @subWithOverflow(self.timestamp_ns, ns);
+        const timestamp = @subWithOverflow(self.timestamp, ns);
         if (timestamp[1] == 1) return error.Overflow;
 
         return .{
-            .timestamp_ns = timestamp[0],
+            .timestamp = timestamp[0],
             .timezone = self.timezone,
         };
     }
@@ -254,34 +254,34 @@ pub fn instant(cfg: Instant.Config) !Instant {
         .now => std.time.nanoTimestamp(),
         .unix_timestamp => |unix| unix * ns_per_s,
         .unix_nano => |nano| nano,
-        .time => |time| time.instant().timestamp_ns,
+        .time => |time| time.instant().timestamp,
         .iso8601,
         .rfc3339,
         => |iso| blk: {
             const t = try Time.fromISO8601(iso);
-            break :blk t.instant().timestamp_ns;
+            break :blk t.instant().timestamp;
         },
         .rfc2822,
         .rfc5322,
         => |eml| blk: {
             const t = try Time.fromRFC5322(eml);
-            break :blk t.instant().timestamp_ns;
+            break :blk t.instant().timestamp;
         },
     };
     return .{
-        .timestamp_ns = ts,
+        .timestamp = ts,
         .timezone = cfg.timezone,
     };
 }
 
 test "instant" {
     const original = Instant{
-        .timestamp_ns = std.time.nanoTimestamp(),
+        .timestamp = std.time.nanoTimestamp(),
         .timezone = &utc,
     };
     const time = original.time();
     const round_trip = time.instant();
-    try std.testing.expectEqual(original.timestamp_ns, round_trip.timestamp_ns);
+    try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
 }
 
 pub const Month = enum(u4) {
@@ -485,7 +485,7 @@ pub const Time = struct {
             .day = self.day,
         });
         return .{
-            .timestamp_ns = @as(i128, days) * ns_per_day +
+            .timestamp = @as(i128, days) * ns_per_day +
                 @as(i128, self.hour) * ns_per_hour +
                 @as(i128, self.minute) * ns_per_min +
                 @as(i128, self.second) * ns_per_s +
@@ -1281,9 +1281,9 @@ pub const Time = struct {
         const self_instant = self.instant();
         const time_instant = time.instant();
 
-        if (self_instant.timestamp_ns > time_instant.timestamp_ns) {
+        if (self_instant.timestamp > time_instant.timestamp) {
             return .after;
-        } else if (self_instant.timestamp_ns < time_instant.timestamp_ns) {
+        } else if (self_instant.timestamp < time_instant.timestamp) {
             return .before;
         } else {
             return .equal;
@@ -1293,19 +1293,19 @@ pub const Time = struct {
     pub fn after(self: Time, time: Time) bool {
         const self_instant = self.instant();
         const time_instant = time.instant();
-        return self_instant.timestamp_ns > time_instant.timestamp_ns;
+        return self_instant.timestamp > time_instant.timestamp;
     }
 
     pub fn before(self: Time, time: Time) bool {
         const self_instant = self.instant();
         const time_instant = time.instant();
-        return self_instant.timestamp_ns < time_instant.timestamp_ns;
+        return self_instant.timestamp < time_instant.timestamp;
     }
 
     pub fn eql(self: Time, time: Time) bool {
         const self_instant = self.instant();
         const time_instant = time.instant();
-        return self_instant.timestamp_ns == time_instant.timestamp_ns;
+        return self_instant.timestamp == time_instant.timestamp;
     }
 };
 
@@ -1523,8 +1523,4 @@ test "gofmt" {
     fbs.reset();
     try time3.gofmt(writer, "frac .999999999");
     try std.testing.expectEqualStrings("frac .123456", fbs.getWritten());
-}
-
-test {
-    std.testing.refAllDecls(@This());
 }

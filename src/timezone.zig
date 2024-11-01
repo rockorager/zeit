@@ -20,9 +20,9 @@ pub const TimeZone = union(enum) {
         else => Noop,
     },
 
-    pub fn adjust(self: TimeZone, timestamp_s: i64) AdjustedTime {
+    pub fn adjust(self: TimeZone, timestamp: i64) AdjustedTime {
         return switch (self) {
-            inline else => |tz| tz.adjust(timestamp_s),
+            inline else => |tz| tz.adjust(timestamp),
         };
     }
 
@@ -38,7 +38,7 @@ pub const TimeZone = union(enum) {
 
 pub const AdjustedTime = struct {
     designation: []const u8,
-    timestamp_s: i64,
+    timestamp: i64,
     is_dst: bool,
 };
 
@@ -47,7 +47,7 @@ pub const Noop = struct {
     pub fn adjust(_: Noop, timestamp: i64) AdjustedTime {
         return .{
             .designation = "noop",
-            .timestamp_s = timestamp,
+            .timestamp = timestamp,
             .is_dst = false,
         };
     }
@@ -64,7 +64,7 @@ pub const Fixed = struct {
     pub fn adjust(self: Fixed, timestamp: i64) AdjustedTime {
         return .{
             .designation = self.name,
-            .timestamp_s = timestamp + self.offset,
+            .timestamp = timestamp + self.offset,
             .is_dst = self.is_dst,
         };
     }
@@ -455,13 +455,13 @@ pub const Posix = struct {
         if (self.isDST(timestamp)) {
             return .{
                 .designation = self.dst orelse self.std,
-                .timestamp_s = timestamp - (self.dst_offset orelse self.std_offset - s_per_hour),
+                .timestamp = timestamp - (self.dst_offset orelse self.std_offset - s_per_hour),
                 .is_dst = true,
             };
         }
         return .{
             .designation = self.std,
-            .timestamp_s = timestamp - self.std_offset,
+            .timestamp = timestamp - self.std_offset,
             .is_dst = false,
         };
     }
@@ -704,7 +704,7 @@ pub const TZInfo = struct {
         } else self.transitions[self.transitions.len - 1];
         return .{
             .designation = transition.timetype.name(),
-            .timestamp_s = timestamp + transition.timetype.offset,
+            .timestamp = timestamp + transition.timetype.offset,
             .is_dst = transition.timetype.isDst(),
         };
     }
@@ -829,7 +829,7 @@ pub const Windows = struct {
         const is_dst = isDST(timestamp, &tzi, &localtime);
         return .{
             .designation = if (is_dst) self.dst_name else self.standard_name,
-            .timestamp_s = systemtimeToUnixTimestamp(localtime),
+            .timestamp = systemtimeToUnixTimestamp(localtime),
             .is_dst = is_dst,
         };
     }
@@ -943,7 +943,7 @@ test "timezone.zig: test Fixed" {
         .is_dst = false,
     };
     const adjusted = fixed.adjust(0);
-    try std.testing.expectEqual(-600, adjusted.timestamp_s);
+    try std.testing.expectEqual(-600, adjusted.timestamp);
 }
 
 test "timezone.zig: Posix.isDST" {
@@ -1062,17 +1062,17 @@ test "timezone.zig: Posix.adjust" {
     {
         const t = try Posix.parse("UTC+1");
         const adjusted = t.adjust(0);
-        try std.testing.expectEqual(-3600, adjusted.timestamp_s);
+        try std.testing.expectEqual(-3600, adjusted.timestamp);
     }
 
     {
         const t = try Posix.parse("CST6CDT,M3.2.0/2:00:00,M11.1.0/2:00:00");
         const adjusted = t.adjust(1704088800);
-        try std.testing.expectEqual(1704067200, adjusted.timestamp_s);
+        try std.testing.expectEqual(1704067200, adjusted.timestamp);
         try std.testing.expectEqualStrings("CST", adjusted.designation);
 
         const adjusted_dst = t.adjust(1710057600);
-        try std.testing.expectEqual(1710039600, adjusted_dst.timestamp_s);
+        try std.testing.expectEqual(1710039600, adjusted_dst.timestamp);
         try std.testing.expectEqualStrings("CDT", adjusted_dst.designation);
     }
 }
@@ -1098,8 +1098,4 @@ test "timezone.zig: Posix.DSTSpec.parse" {
         try std.testing.expectEqual(3, spec.mwd.week);
         try std.testing.expectEqual(.sun, spec.mwd.day);
     }
-}
-
-test {
-    std.testing.refAllDecls(@This());
 }

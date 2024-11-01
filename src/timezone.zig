@@ -5,6 +5,7 @@ const zeit = @import("zeit.zig");
 const assert = std.debug.assert;
 
 const Month = zeit.Month;
+const Seconds = zeit.Seconds;
 const Weekday = zeit.Weekday;
 
 const s_per_min = std.time.s_per_min;
@@ -20,7 +21,7 @@ pub const TimeZone = union(enum) {
         else => Noop,
     },
 
-    pub fn adjust(self: TimeZone, timestamp: i64) AdjustedTime {
+    pub fn adjust(self: TimeZone, timestamp: Seconds) AdjustedTime {
         return switch (self) {
             inline else => |tz| tz.adjust(timestamp),
         };
@@ -38,13 +39,13 @@ pub const TimeZone = union(enum) {
 
 pub const AdjustedTime = struct {
     designation: []const u8,
-    timestamp: i64,
+    timestamp: Seconds,
     is_dst: bool,
 };
 
 /// A Noop timezone we use for the windows struct when not on windows
 pub const Noop = struct {
-    pub fn adjust(_: Noop, timestamp: i64) AdjustedTime {
+    pub fn adjust(_: Noop, timestamp: Seconds) AdjustedTime {
         return .{
             .designation = "noop",
             .timestamp = timestamp,
@@ -58,10 +59,10 @@ pub const Noop = struct {
 /// A fixed timezone
 pub const Fixed = struct {
     name: []const u8,
-    offset: i64,
+    offset: Seconds,
     is_dst: bool,
 
-    pub fn adjust(self: Fixed, timestamp: i64) AdjustedTime {
+    pub fn adjust(self: Fixed, timestamp: Seconds) AdjustedTime {
         return .{
             .designation = self.name,
             .timestamp = timestamp + self.offset,
@@ -79,11 +80,11 @@ pub const Posix = struct {
     /// abbreviation for standard time
     std: []const u8,
     /// standard time offset in seconds
-    std_offset: i64,
+    std_offset: Seconds,
     /// abbreviation for daylight saving time
     dst: ?[]const u8 = null,
     /// offset when in dst, defaults to one hour less than std_offset if not present
-    dst_offset: ?i64 = null,
+    dst_offset: ?Seconds = null,
 
     start: ?DSTSpec = null,
     end: ?DSTSpec = null,
@@ -93,12 +94,12 @@ pub const Posix = struct {
         /// years
         julian: struct {
             day: u9,
-            time: i64 = 7200,
+            time: Seconds = 7200,
         },
         /// <n>: julian day between 0 and 365. Leap day counts
         julian_leap: struct {
             day: u9,
-            time: i64 = 7200,
+            time: Seconds = 7200,
         },
         /// M<m>.<w>.<d>: day d of week w of month m. Day is 0 (sunday) to 6. week
         /// is 1 to 5, where 5 would mean last d day of the month.
@@ -106,7 +107,7 @@ pub const Posix = struct {
             month: Month,
             week: u6,
             day: Weekday,
-            time: i64 = 7200,
+            time: Seconds = 7200,
         },
 
         fn parse(str: []const u8) !DSTSpec {
@@ -145,9 +146,9 @@ pub const Posix = struct {
 
     pub fn parse(str: []const u8) !Posix {
         var std_: []const u8 = "";
-        var std_offset: i64 = 0;
+        var std_offset: Seconds = 0;
         var dst: ?[]const u8 = null;
-        var dst_offset: ?i64 = null;
+        var dst_offset: ?Seconds = null;
         var start: ?DSTSpec = null;
         var end: ?DSTSpec = null;
 
@@ -316,7 +317,7 @@ pub const Posix = struct {
         };
     }
 
-    fn parseTime(str: []const u8) i64 {
+    fn parseTime(str: []const u8) Seconds {
         const State = enum {
             hour,
             minute,
@@ -364,14 +365,14 @@ pub const Posix = struct {
     }
 
     /// reports true if the unix timestamp occurs when DST is in effect
-    fn isDST(self: Posix, timestamp: i64) bool {
+    fn isDST(self: Posix, timestamp: Seconds) bool {
         const start = self.start orelse return false;
         const end = self.end orelse return false;
         const days_from_epoch = @divFloor(timestamp, s_per_day);
         const civil = zeit.civilFromDays(days_from_epoch);
         const civil_month = @intFromEnum(civil.month);
 
-        const start_s: i64 = switch (start) {
+        const start_s: Seconds = switch (start) {
             .julian => |rule| blk: {
                 const days = days_from_epoch - civil.month.daysBefore(civil.year) - civil.day + rule.day + 1;
                 var s = (@as(i64, days - 1)) * s_per_day + rule.time;
@@ -410,7 +411,7 @@ pub const Posix = struct {
             },
         };
 
-        const end_s: i64 = switch (end) {
+        const end_s: Seconds = switch (end) {
             .julian => |rule| blk: {
                 const days = days_from_epoch - civil.month.daysBefore(civil.year) - civil.day + rule.day + 1;
                 var s = (@as(i64, days) - 1) * s_per_day + rule.time;
@@ -451,7 +452,7 @@ pub const Posix = struct {
         return timestamp >= start_s and timestamp < end_s;
     }
 
-    pub fn adjust(self: Posix, timestamp: i64) AdjustedTime {
+    pub fn adjust(self: Posix, timestamp: Seconds) AdjustedTime {
         if (self.isDST(timestamp)) {
             return .{
                 .designation = self.dst orelse self.std,
@@ -503,7 +504,7 @@ pub const TZInfo = struct {
     };
 
     const Transition = struct {
-        ts: i64,
+        ts: Seconds,
         timetype: *Timetype,
     };
 
@@ -683,7 +684,7 @@ pub const TZInfo = struct {
     }
 
     /// adjust a unix timestamp to the timezone
-    pub fn adjust(self: TZInfo, timestamp: i64) AdjustedTime {
+    pub fn adjust(self: TZInfo, timestamp: Seconds) AdjustedTime {
         // if we are past the last transition and have a footer, we use the
         // footer data
         if ((self.transitions.len == 0 or self.transitions[self.transitions.len - 1].ts <= timestamp) and
@@ -799,7 +800,7 @@ pub const Windows = struct {
     /// 3. Get the relevant TIME_ZONE_INFORMATION for the year
     /// 4. Determine if we are in DST or not
     /// 5. Return result
-    pub fn adjust(self: Windows, timestamp: i64) AdjustedTime {
+    pub fn adjust(self: Windows, timestamp: Seconds) AdjustedTime {
         const instant = zeit.instant(.{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
         const time = instant.time();
 
@@ -834,7 +835,7 @@ pub const Windows = struct {
         };
     }
 
-    fn systemtimeToUnixTimestamp(sys: windows.SYSTEMTIME) i64 {
+    fn systemtimeToUnixTimestamp(sys: windows.SYSTEMTIME) Seconds {
         const lzt = systemtimetoZeitTime(sys);
         return lzt.instant().unixTimestamp();
     }
@@ -851,7 +852,7 @@ pub const Windows = struct {
         };
     }
 
-    fn isDST(timestamp: i64, tzi: *const windows.TIME_ZONE_INFORMATION, time: *const windows.SYSTEMTIME) bool {
+    fn isDST(timestamp: Seconds, tzi: *const windows.TIME_ZONE_INFORMATION, time: *const windows.SYSTEMTIME) bool {
         // If wMonth on StandardDate is 0, the timezone doesn't have DST
         if (tzi.StandardDate.wMonth == 0) return false;
         const start = tzi.DaylightDate;

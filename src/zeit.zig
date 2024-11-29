@@ -882,12 +882,16 @@ pub const Time = struct {
             switch (b) {
                 '%' => try writer.writeByte('%'),
                 'a' => {
-                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const days = daysFromCivil(
+                        .{ .year = self.year, .month = self.month, .day = self.day },
+                    );
                     const weekday = weekdayFromDays(days);
                     try writer.writeAll(weekday.shortName());
                 },
                 'A' => {
-                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const days = daysFromCivil(
+                        .{ .year = self.year, .month = self.month, .day = self.day },
+                    );
                     const weekday = weekdayFromDays(days);
                     try writer.writeAll(weekday.name());
                 },
@@ -951,7 +955,9 @@ pub const Time = struct {
                 't' => try writer.writeByte('\t'),
                 'T' => try self.strftime(writer, "%H:%M:%S"),
                 'u' => {
-                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const days = daysFromCivil(
+                        .{ .year = self.year, .month = self.month, .day = self.day },
+                    );
                     const weekday = weekdayFromDays(days);
                     switch (weekday) {
                         .sun => try writer.writeByte('7'),
@@ -962,8 +968,8 @@ pub const Time = struct {
                     const day_of_year = self.day + self.month.daysBefore(self.year);
                     // find the date of the first sunday
                     const weekd_jan_1 = blk: {
-                        const jan_1: Time = .{ .year = self.year, .month = .jan, .day = 1 };
-                        const days = daysSinceEpoch(jan_1.instant().unixTimestamp());
+                        const jan_1: Date = .{ .year = self.year, .month = .jan, .day = 1 };
+                        const days = daysFromCivil(jan_1);
                         break :blk weekdayFromDays(days);
                     };
                     // Day of year of first sunday. This represents the start of week 1
@@ -978,7 +984,9 @@ pub const Time = struct {
                 },
                 'V' => return error.UnsupportedSpecifier,
                 'w' => {
-                    const days = daysSinceEpoch(inst.unixTimestamp());
+                    const days = daysFromCivil(
+                        .{ .year = self.year, .month = self.month, .day = self.day },
+                    );
                     const weekday = weekdayFromDays(days);
                     try writer.writeByte(@as(u8, @intFromEnum(weekday)) + 0x30);
                 },
@@ -986,8 +994,8 @@ pub const Time = struct {
                     const day_of_year = self.day + self.month.daysBefore(self.year);
                     // find the date of the first sunday
                     const weekd_jan_1 = blk: {
-                        const jan_1: Time = .{ .year = self.year, .month = .jan, .day = 1 };
-                        const days = daysSinceEpoch(jan_1.instant().unixTimestamp());
+                        const jan_1: Date = .{ .year = self.year, .month = .jan, .day = 1 };
+                        const days = daysFromCivil(jan_1);
                         break :blk weekdayFromDays(days);
                     };
                     // Day of year of first sunday. This represents the start of week 1
@@ -1025,7 +1033,6 @@ pub const Time = struct {
 
     /// Format using golang magic date format.
     pub fn gofmt(self: Time, writer: anytype, fmt: []const u8) !void {
-        const inst = self.instant();
         var i: usize = 0;
         while (i < fmt.len) : (i += 1) {
             const b = fmt[i];
@@ -1041,19 +1048,25 @@ pub const Time = struct {
                 },
                 'M' => { // Monday, Mon, MST
                     if (std.mem.startsWith(u8, fmt[i..], "Monday")) {
-                        const days = daysSinceEpoch(inst.unixTimestamp());
+                        const days = daysFromCivil(
+                            .{ .year = self.year, .month = self.month, .day = self.day },
+                        );
                         const weekday = weekdayFromDays(days);
                         try writer.writeAll(weekday.name());
                         i += 5;
                     } else if (std.mem.startsWith(u8, fmt[i..], "Mon")) {
                         if (i + 3 >= fmt.len) {
-                            const days = daysSinceEpoch(inst.unixTimestamp());
+                            const days = daysFromCivil(
+                                .{ .year = self.year, .month = self.month, .day = self.day },
+                            );
                             const weekday = weekdayFromDays(days);
                             try writer.writeAll(weekday.shortName());
                             i += 2;
                         } else if (!std.ascii.isLower(fmt[i + 3])) {
                             // We only write "Mon" if the next char is *not* a lowercase
-                            const days = daysSinceEpoch(inst.unixTimestamp());
+                            const days = daysFromCivil(
+                                .{ .year = self.year, .month = self.month, .day = self.day },
+                            );
                             const weekday = weekdayFromDays(days);
                             try writer.writeAll(weekday.shortName());
                             i += 2;
@@ -1591,4 +1604,31 @@ test Instant {
             .rfc3339 = "2024-03-16T08:38:29.496706064-1200",
         },
     });
+}
+
+test "#15" {
+    // https://github.com/rockorager/zeit/issues/15
+    const timestamp = 1732838300;
+    const tz = try loadTimeZone(std.testing.allocator, .@"Europe/Berlin", null);
+    defer tz.deinit();
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+    const time = inst.time();
+
+    try std.testing.expectEqual(timestamp, time.instant().unixTimestamp());
+
+    try std.testing.expectEqual(2024, time.year);
+    try std.testing.expectEqual(Month.nov, time.month);
+    try std.testing.expectEqual(29, time.day);
+    try std.testing.expectEqual(0, time.hour);
+    try std.testing.expectEqual(58, time.minute);
+    try std.testing.expectEqual(20, time.second);
+
+    try time.strftime(list.writer(), "%a %A %u");
+    try std.testing.expectEqualStrings("Fri Friday 5", list.items);
+
+    list.clearRetainingCapacity();
+    try time.gofmt(list.writer(), "Mon Monday");
+    try std.testing.expectEqualStrings("Fri Friday", list.items);
 }

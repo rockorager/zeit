@@ -1,0 +1,4 @@
+no step named 'run'
+  access the help menu with 'zig build -h'
+error: the following build command failed with exit code 1:
+/home/tim/repos/zeit/.zig-cache/o/20e568d5e5df28c3ad066710c644fbf7/build /home/tim/.local/share/zig/versions/zig-linux-x86_64-0.14.0-dev.2059+cdd8e82f0/zig /home/tim/.local/share/zig/versions/zig-linux-x86_64-0.14.0-dev.2059+cdd8e82f0/lib /home/tim/repos/zeit /home/tim/repos/zeit/.zig-cache /home/tim/.cache/zig --seed 0x7476ac27 -Z44e6195a2e85337e run

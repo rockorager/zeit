@@ -43,6 +43,7 @@ pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !T
             }
 
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});
+            defer f.close();
             return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
         },
     }
@@ -66,6 +67,7 @@ fn localFromEnv(
     assert(tz.len > 1); // TZ not long enough
     if (tz[1] == '/') {
         const f = try std.fs.cwd().openFile(tz[1..], .{});
+        defer f.close();
         return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
     }
 

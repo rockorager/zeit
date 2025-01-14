@@ -258,7 +258,7 @@ pub const Instant = struct {
 pub fn instant(cfg: Instant.Config) !Instant {
     const ts: Nanoseconds = switch (cfg.source) {
         .now => std.time.nanoTimestamp(),
-        .unix_timestamp => |unix| unix * ns_per_s,
+        .unix_timestamp => |unix| @as(i128, unix) * ns_per_s,
         .unix_nano => |nano| nano,
         .time => |time| time.instant().timestamp,
         .iso8601,

@@ -462,6 +462,71 @@ pub const Date = struct {
     year: i32,
     month: Month,
     day: u5, // 1-31
+
+    /// Checks for equality of two dates
+    pub fn eql(date1: Date, date2: Date) bool {
+        return date1.year == date2.year and
+            date1.month == date2.month and
+            date1.day == date2.day;
+    }
+
+    test "Date-Equality" {
+        const date: Date = .{
+            .year = 2025,
+            .month = Month.sep,
+            .day = 13,
+        };
+        try std.testing.expect(date.eql(Date{ .year = 2025, .month = Month.sep, .day = 13 }));
+        try std.testing.expect(!date.eql(Date{ .year = 2025, .month = Month.sep, .day = 12 }));
+        try std.testing.expect(!date.eql(Date{ .year = 2025, .month = Month.aug, .day = 13 }));
+        try std.testing.expect(!date.eql(Date{ .year = 2024, .month = Month.sep, .day = 13 }));
+    }
+
+    /// Compares two dates with another. If `date2` happens after `date1`, then the `TimeComparison.after` is returned.
+    /// If `date2` happens before `date1`, then `TimeComparison.before` is returned. If both represent the same date, `TimeComparison.equal` is returned;
+    pub fn compare(date1: Date, date2: Date) TimeComparison {
+        if (date1.year > date2.year) {
+            return .before;
+        } else if (date1.year < date2.year) {
+            return .after;
+        }
+
+        if (@intFromEnum(date1.month) > @intFromEnum(date2.month)) {
+            return .before;
+        } else if (@intFromEnum(date1.month) < @intFromEnum(date2.month)) {
+            return .after;
+        }
+
+        if (date1.day > date2.day) {
+            return .before;
+        } else if (date1.day < date2.day) {
+            return .after;
+        }
+
+        return .equal;
+    }
+
+    test "Date-Comparison" {
+        const date: Date = .{
+            .year = 2025,
+            .month = Month.sep,
+            .day = 13,
+        };
+
+        try std.testing.expectEqual(TimeComparison.before, date.compare(Date{ .year = 2025, .month = Month.sep, .day = 12 }));
+        try std.testing.expectEqual(TimeComparison.before, date.compare(Date{ .year = 2025, .month = Month.aug, .day = 13 }));
+        try std.testing.expectEqual(TimeComparison.before, date.compare(Date{ .year = 2024, .month = Month.sep, .day = 13 }));
+        try std.testing.expectEqual(TimeComparison.before, date.compare(Date{ .year = 2024, .month = Month.dec, .day = 31 }));
+        try std.testing.expectEqual(TimeComparison.before, date.compare(Date{ .year = 2025, .month = Month.aug, .day = 31 }));
+
+        try std.testing.expectEqual(TimeComparison.after, date.compare(Date{ .year = 2025, .month = Month.sep, .day = 14 }));
+        try std.testing.expectEqual(TimeComparison.after, date.compare(Date{ .year = 2025, .month = Month.oct, .day = 13 }));
+        try std.testing.expectEqual(TimeComparison.after, date.compare(Date{ .year = 2026, .month = Month.sep, .day = 13 }));
+        try std.testing.expectEqual(TimeComparison.after, date.compare(Date{ .year = 2026, .month = Month.jan, .day = 1 }));
+        try std.testing.expectEqual(TimeComparison.after, date.compare(Date{ .year = 2025, .month = Month.oct, .day = 1 }));
+
+        try std.testing.expectEqual(TimeComparison.equal, date.compare(Date{ .year = 2025, .month = Month.sep, .day = 13 }));
+    }
 };
 
 pub const TimeComparison = enum(u2) {

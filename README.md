@@ -2,6 +2,54 @@
 
 A time library written in zig.
 
+## Install
+1. Install the library through the package manager:
+   ```sh
+   zig fetch --save https://github.com/rockorager/zeit/archive/refs/heads/main.zip
+   ```
+
+2. Create a module in your `build.zig` file:
+   ```zig
+   pub fn build(b: *std.Build) void {
+       // Standard target options allows the person running `zig build` to choose
+       // what target to build for. Here we do not override the defaults, which
+       // means any target is allowed, and the default is native. Other options
+       // for restricting supported target set are available.
+       const target = b.standardTargetOptions(.{});
+
+       // Standard optimization options allow the person running `zig build` to select
+       // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+       // set a preferred release mode, allowing the user to decide how to optimize.
+       const optimize = b.standardOptimizeOption(.{});
+
+       // Create the zeit dependency and module.
+       const zeit_dep = b.dependency("zeit", .{ .target = target, .optimize = optimize });
+       const zeit_mod = zeit_dep.module("zeit");
+       // ...
+   }
+   ```
+3. Then link this module to your lib/exe:
+    ```zig
+    pub fn build(b: *std.Build) void {
+        const lib = b.addStaticLibrary(.{
+	    .name = "YourLibraryName",
+            // In this case the main source file is merely a path, however, in more
+            // complicated build scripts, this could be a generated file.
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+         });
+         lib.root_module.addImport("zeit", zeit_mod);
+         // ...
+    }
+    ```
+
+4. Include it your zig files through:
+   ```zig
+   const std = @import("std");
+   const zeit = @import("zeit");
+   ```
+
 ## Usage
 
 [API Documentation](https://rockorager.github.io/zeit/)

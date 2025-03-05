@@ -1,5 +1,6 @@
 .{
-    .name = "zeit",
+    .name = .zeit,
+    .fingerprint = 0x888df3e4939b8ee4,
     .version = "0.0.0",
     .dependencies = .{},
     .paths = .{

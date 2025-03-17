@@ -10,6 +10,7 @@ pub const Location = location.Location;
 
 pub const Days = i64;
 pub const Nanoseconds = i128;
+pub const Milliseconds = i128;
 pub const Seconds = i64;
 
 const ns_per_us = std.time.ns_per_us;
@@ -189,6 +190,10 @@ pub const Instant = struct {
     // convert the nanosecond timestamp into a unix timestamp (in seconds)
     pub fn unixTimestamp(self: Instant) Seconds {
         return @intCast(@divFloor(self.timestamp, ns_per_s));
+    }
+
+    pub fn milliTimestamp(self: Instant) Milliseconds {
+        return @intCast(@divFloor(self.timestamp, ns_per_ms));
     }
 
     // generate a calendar date and time for this instant

@@ -1,7 +1,7 @@
 .{
     .name = .zeit,
     .fingerprint = 0x888df3e4939b8ee4,
-    .version = "0.0.0",
+    .version = "0.6.0",
     .dependencies = .{},
     .paths = .{
         "LICENSE",

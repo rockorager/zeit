@@ -177,6 +177,9 @@ pub const Instant = struct {
 
         /// Parse a datetime from an RFC2822 date-time spec. This is an alias for RFC5322
         rfc2822: []const u8,
+
+        /// Parse a datetime from an RFC1123 date-time spec
+        rfc1123: []const u8,
     };
 
     /// convert this Instant to another timezone
@@ -276,6 +279,10 @@ pub fn instant(cfg: Instant.Config) !Instant {
         .rfc5322,
         => |eml| blk: {
             const t = try Time.fromRFC5322(eml);
+            break :blk t.instant().timestamp;
+        },
+        .rfc1123 => |http_date| blk: {
+            const t = try Time.fromRFC1123(http_date);
             break :blk t.instant().timestamp;
         },
     };

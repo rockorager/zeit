@@ -888,6 +888,89 @@ pub const Time = struct {
         }
     }
 
+    pub fn fromRFC1123(http_date: []const u8) !Time {
+        const parseInt = std.fmt.parseInt;
+        var time: Time = .{};
+        var i: usize = 0;
+
+        // day
+        {
+            // consume until a digit
+            while (i < http_date.len and !std.ascii.isDigit(http_date[i])) : (i += 1) {}
+            const end = std.mem.indexOfScalarPos(u8, http_date, i, ' ') orelse return error.InvalidFormat;
+            time.day = try parseInt(u5, http_date[i..end], 10);
+            i = end + 1;
+        }
+
+        // month
+        {
+            // consume until an alpha
+            while (i < http_date.len and !std.ascii.isAlphabetic(http_date[i])) : (i += 1) {}
+            assert(http_date.len >= i + 3);
+            var buf: [3]u8 = undefined;
+            buf[0] = std.ascii.toLower(http_date[i]);
+            buf[1] = std.ascii.toLower(http_date[i + 1]);
+            buf[2] = std.ascii.toLower(http_date[i + 2]);
+            time.month = std.meta.stringToEnum(Month, &buf) orelse return error.InvalidFormat;
+            i += 3;
+        }
+
+        // year
+        {
+            // consume until a digit
+            while (i < http_date.len and !std.ascii.isDigit(http_date[i])) : (i += 1) {}
+            assert(http_date.len >= i + 4);
+            time.year = try parseInt(i32, http_date[i .. i + 4], 10);
+            i += 4;
+        }
+
+        // hour
+        {
+            // consume until a digit
+            while (i < http_date.len and !std.ascii.isDigit(http_date[i])) : (i += 1) {}
+            const end = std.mem.indexOfScalarPos(u8, http_date, i, ':') orelse return error.InvalidFormat;
+            time.hour = try parseInt(u5, http_date[i..end], 10);
+            i = end + 1;
+        }
+        // minute
+        {
+            // consume until a digit
+            while (i < http_date.len and !std.ascii.isDigit(http_date[i])) : (i += 1) {}
+            assert(i + 2 < http_date.len);
+            time.minute = try parseInt(u6, http_date[i .. i + 2], 10);
+            i += 2;
+        }
+        // second
+        {
+            assert(i < http_date.len);
+            i += 1;
+            assert(i + 2 < http_date.len);
+            time.second = try parseInt(u6, http_date[i .. i + 2], 10);
+            i += 2;
+        }
+        // zone
+        {
+            // consume whitespace
+            while (i < http_date.len and std.ascii.isWhitespace(http_date[i])) : (i += 1) {}
+            assert(std.mem.eql(u8, http_date[i..], "GMT"));
+            time.offset = 0;
+        }
+        return time;
+    }
+
+    test "fromRFC1123" {
+        {
+            const time = try Time.fromRFC1123("Sun, 06 Nov 1994 08:49:37 GMT");
+            try std.testing.expectEqual(1994, time.year);
+            try std.testing.expectEqual(.nov, time.month);
+            try std.testing.expectEqual(6, time.day);
+            try std.testing.expectEqual(8, time.hour);
+            try std.testing.expectEqual(49, time.minute);
+            try std.testing.expectEqual(37, time.second);
+            try std.testing.expectEqual(0, time.offset);
+        }
+    }
+
     pub const Format = union(enum) {
         rfc3339, // YYYY-MM-DD-THH:MM:SS.sss+00:00
     };

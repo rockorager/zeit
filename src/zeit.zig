@@ -1313,16 +1313,22 @@ pub const Time = struct {
                 '4' => try writer.print("{d}", .{self.minute}),
                 '5' => try writer.print("{d}", .{self.second}),
                 'P' => {
-                    if (self.hour >= 12)
-                        try writer.writeAll("PM")
-                    else
-                        try writer.writeAll("AM");
+                    if (i + 1 < fmt.len and fmt[i + 1] == 'M') {
+                        i += 1;
+                        if (self.hour >= 12)
+                            try writer.writeAll("PM")
+                        else
+                            try writer.writeAll("AM");
+                    }
                 },
                 'p' => {
-                    if (self.hour >= 12)
-                        try writer.writeAll("pm")
-                    else
-                        try writer.writeAll("am");
+                    if (i + 1 < fmt.len and fmt[i + 1] == 'm') {
+                        i += 1;
+                        if (self.hour >= 12)
+                            try writer.writeAll("pm")
+                        else
+                            try writer.writeAll("am");
+                    }
                 },
                 '-', 'Z' => { // -070000, -07:00:00, -0700, -07:00, -07
                     if (i == fmt.len - 1) {
@@ -1817,4 +1823,18 @@ test "github.com/rockorager/zeit/issues/27" {
 
     try time.gofmt(list.writer(), "02.01.2006");
     try std.testing.expectEqualStrings("23.04.2025", list.items);
+}
+
+test "github.com/rockorager/zeit/issues/24" {
+    // April 23, 2025
+    const timestamp = 1745414170;
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
+
+    var list: std.ArrayList(u8) = .init(std.testing.allocator);
+    defer list.deinit();
+
+    const time = inst.time();
+
+    try time.gofmt(list.writer(), "3pm MST");
+    try std.testing.expectEqualStrings("1pm UTC", list.items);
 }

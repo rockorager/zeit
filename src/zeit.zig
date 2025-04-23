@@ -1387,12 +1387,17 @@ pub const Time = struct {
 
                     if (i == fmt.len - 1) continue;
 
-                    i += 1;
-                    switch (fmt[i]) {
+                    const c = fmt[i + 1];
+                    switch (c) {
                         '0' => {
                             var n: usize = 0;
-                            while (i + n < fmt.len and fmt[i + n] == '0') : (n += 1) {}
-                            i += n;
+                            const j: usize = i + 1;
+                            while (j + n < fmt.len and fmt[j + n] == '0') : (n += 1) {}
+
+                            // If we ended on a digit, it wasn't a 0. That means this was not a
+                            // valid fractional second
+                            if (j + n < fmt.len and std.ascii.isDigit(fmt[j + n])) continue;
+                            i += j + n;
 
                             var buf: [9]u8 = undefined;
                             const str = try std.fmt.bufPrint(
@@ -1406,8 +1411,13 @@ pub const Time = struct {
                         },
                         '9' => {
                             var n: usize = 0;
-                            while (i + n < fmt.len and fmt[i + n] == '9') : (n += 1) {}
-                            i += n;
+                            const j: usize = i + 1;
+                            while (j + n < fmt.len and fmt[j + n] == '9') : (n += 1) {}
+
+                            // If we ended on a digit, it wasn't a 0. That means this was not a
+                            // valid fractional second
+                            if (j + n < fmt.len and std.ascii.isDigit(fmt[j + n])) continue;
+                            i += j + n;
 
                             var buf: [9]u8 = undefined;
                             const str = try std.fmt.bufPrint(
@@ -1424,7 +1434,7 @@ pub const Time = struct {
                             }
                             try writer.writeAll(str[0..last_non_zero]);
                         },
-                        else => try writer.writeByte(fmt[i]),
+                        else => continue,
                     }
                 },
                 else => try writer.writeByte(b),
@@ -1768,7 +1778,7 @@ test Instant {
     });
 }
 
-test "#15" {
+test "github.com/rockorager/zeit/issues/15" {
     // https://github.com/rockorager/zeit/issues/15
     const timestamp = 1732838300;
     const tz = try loadTimeZone(std.testing.allocator, .@"Europe/Berlin", null);
@@ -1793,4 +1803,18 @@ test "#15" {
     list.clearRetainingCapacity();
     try time.gofmt(list.writer(), "Mon Monday");
     try std.testing.expectEqualStrings("Fri Friday", list.items);
+}
+
+test "github.com/rockorager/zeit/issues/27" {
+    // April 23, 2025
+    const timestamp = 1745414170;
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
+
+    var list: std.ArrayList(u8) = .init(std.testing.allocator);
+    defer list.deinit();
+
+    const time = inst.time();
+
+    try time.gofmt(list.writer(), "02.01.2006");
+    try std.testing.expectEqualStrings("23.04.2025", list.items);
 }

@@ -1443,6 +1443,28 @@ pub const Time = struct {
                         else => continue,
                     }
                 },
+                'N' => {
+                    if (std.mem.startsWith(u8, fmt[i..], "ND")) {
+                        i += 1;
+                        switch (self.day) {
+                            0, 4...20, 24...30 => try writer.writeAll("TH"),
+                            1, 21, 31 => try writer.writeAll("ST"),
+                            2, 22 => try writer.writeAll("ND"),
+                            3, 23 => try writer.writeAll("RD"),
+                        }
+                    } else try writer.writeByte(b);
+                },
+                'n' => {
+                    if (std.mem.startsWith(u8, fmt[i..], "nd")) {
+                        i += 1;
+                        switch (self.day) {
+                            0, 4...20, 24...30 => try writer.writeAll("th"),
+                            1, 21, 31 => try writer.writeAll("st"),
+                            2, 22 => try writer.writeAll("nd"),
+                            3, 23 => try writer.writeAll("rd"),
+                        }
+                    } else try writer.writeByte(b);
+                },
                 else => try writer.writeByte(b),
             }
         }
@@ -1841,4 +1863,22 @@ test "github.com/rockorager/zeit/issues/24" {
 
     try time.gofmt(list.writer(), "3p MST");
     try std.testing.expectEqualStrings("1p UTC", list.items);
+}
+
+test "github.com/rockorager/zeit/issues/26" {
+    // April 23, 2025
+    const timestamp = 1745414170;
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
+
+    var list: std.ArrayList(u8) = .init(std.testing.allocator);
+    defer list.deinit();
+
+    const time = inst.time();
+
+    try time.gofmt(list.writer(), "02nd");
+    try std.testing.expectEqualStrings("23rd", list.items);
+    list.clearRetainingCapacity();
+
+    try time.gofmt(list.writer(), "02ND");
+    try std.testing.expectEqualStrings("23RD", list.items);
 }

@@ -1319,7 +1319,7 @@ pub const Time = struct {
                             try writer.writeAll("PM")
                         else
                             try writer.writeAll("AM");
-                    }
+                    } else try writer.writeByte(b);
                 },
                 'p' => {
                     if (i + 1 < fmt.len and fmt[i + 1] == 'm') {
@@ -1328,7 +1328,7 @@ pub const Time = struct {
                             try writer.writeAll("pm")
                         else
                             try writer.writeAll("am");
-                    }
+                    } else try writer.writeByte(b);
                 },
                 '-', 'Z' => { // -070000, -07:00:00, -0700, -07:00, -07
                     if (i == fmt.len - 1) {
@@ -1837,4 +1837,8 @@ test "github.com/rockorager/zeit/issues/24" {
 
     try time.gofmt(list.writer(), "3pm MST");
     try std.testing.expectEqualStrings("1pm UTC", list.items);
+    list.clearRetainingCapacity();
+
+    try time.gofmt(list.writer(), "3p MST");
+    try std.testing.expectEqualStrings("1p UTC", list.items);
 }

@@ -794,6 +794,26 @@ pub const Time = struct {
             const offset = try Time.fromISO8601("20000212T111213+1230");
             try std.testing.expectEqual(12 * s_per_hour + 30 * s_per_min, offset.offset);
         }
+        {
+            const basic = try Time.fromISO8601("20240224T154944");
+            try std.testing.expectEqual(2024, basic.year);
+            try std.testing.expectEqual(Month.feb, basic.month);
+            try std.testing.expectEqual(24, basic.day);
+            try std.testing.expectEqual(15, basic.hour);
+            try std.testing.expectEqual(49, basic.minute);
+            try std.testing.expectEqual(44, basic.second);
+            try std.testing.expectEqual(0, basic.offset);
+        }
+        {
+            const basic = try Time.fromISO8601("20240224T154944Z");
+            try std.testing.expectEqual(2024, basic.year);
+            try std.testing.expectEqual(Month.feb, basic.month);
+            try std.testing.expectEqual(24, basic.day);
+            try std.testing.expectEqual(15, basic.hour);
+            try std.testing.expectEqual(49, basic.minute);
+            try std.testing.expectEqual(44, basic.second);
+            try std.testing.expectEqual(0, basic.offset);
+        }
     }
 
     pub fn fromRFC5322(eml: []const u8) !Time {

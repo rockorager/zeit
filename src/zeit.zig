@@ -638,7 +638,7 @@ pub const Time = struct {
                         4 => { // MMDD
                             const m: u4 = try parseInt(u4, iso[i .. i + 2], 10);
                             time.month = @enumFromInt(m);
-                            time.day = try parseInt(u4, iso[i + 2 .. token_end], 10);
+                            time.day = try parseInt(u5, iso[i + 2 .. token_end], 10);
                             state = .hour;
                         },
                         else => return error.InvalidISO8601,

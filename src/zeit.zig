@@ -667,8 +667,10 @@ pub const Time = struct {
                     const b = iso[i];
                     if (b == '.') return error.UnhandledFormat; // TODO:
                     if (b == ':') i += 1;
-                    time.second = try parseInt(u6, iso[i .. i + 2], 10);
-                    i += 2;
+                    if (std.ascii.isDigit(iso[i])) {
+                        time.second = try parseInt(u6, iso[i .. i + 2], 10);
+                        i += 2;
+                    }
                     state = .second_fraction_or_offset;
                 },
                 .second_fraction_or_offset => {
@@ -760,6 +762,14 @@ pub const Time = struct {
             try std.testing.expectEqual(11, ymdh_ext.hour);
         }
         {
+            const ymdhm = try Time.fromISO8601("2025-05-19T11:23");
+            try std.testing.expectEqual(2025, ymdhm.year);
+            try std.testing.expectEqual(.may, ymdhm.month);
+            try std.testing.expectEqual(19, ymdhm.day);
+            try std.testing.expectEqual(11, ymdhm.hour);
+            try std.testing.expectEqual(23, ymdhm.minute);
+        }
+        {
             const full = try Time.fromISO8601("20000212 111213Z");
             try std.testing.expectEqual(2000, full.year);
             try std.testing.expectEqual(.feb, full.month);
@@ -789,6 +799,10 @@ pub const Time = struct {
         {
             const offset = try Time.fromISO8601("2000-02-12T11:12:13+12:30");
             try std.testing.expectEqual(12 * s_per_hour + 30 * s_per_min, offset.offset);
+        }
+        {
+            const offset = try Time.fromISO8601("2025-05-19T11:23+0200");
+            try std.testing.expectEqual(2 * s_per_hour, offset.offset);
         }
         {
             const offset = try Time.fromISO8601("20000212T111213+1230");

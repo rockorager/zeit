@@ -1,8 +1,5 @@
 const std = @import("std");
 
-/// Allow the full zeit API to be usable at build time
-pub usingnamespace @import("src/zeit.zig");
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});

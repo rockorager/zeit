@@ -45,7 +45,11 @@ pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !T
 
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});
             defer f.close();
-            return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+
+            var buf: [4096]u8 = undefined;
+            var fr = f.reader(&buf);
+
+            return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &fr.interface) };
         },
     }
 }
@@ -69,7 +73,11 @@ fn localFromEnv(
     if (tz[1] == '/') {
         const f = try std.fs.cwd().openFile(tz[1..], .{});
         defer f.close();
-        return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+
+        var buf: [4096]u8 = undefined;
+        var fr = f.reader(&buf);
+
+        return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &fr.interface) };
     }
 
     if (std.meta.stringToEnum(Location, tz[1..])) |loc|
@@ -116,7 +124,11 @@ pub fn loadTimeZone(
     defer dir.close();
     const f = try dir.openFile(loc.asText(), .{});
     defer f.close();
-    return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+
+    var buf: [4096]u8 = undefined;
+    var fr = f.reader(&buf);
+
+    return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &fr.interface) };
 }
 
 /// An Instant in time. Instants occur at a precise time and place, thus must

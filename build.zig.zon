@@ -2,6 +2,7 @@
     .name = .zeit,
     .fingerprint = 0x888df3e4939b8ee4,
     .version = "0.6.0",
+    .minimum_zig_version = "0.15.0-dev.1048+f43f89a70",
     .dependencies = .{},
     .paths = .{
         "LICENSE",

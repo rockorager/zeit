@@ -653,10 +653,6 @@ pub const TZInfo = struct {
                 else => return err,
             };
 
-            // TODO: if ever added to std.Io.Reader, use takeSentinelLimit
-            //       above and remove this check.
-            if (footer_mem.len > 127) return error.OverlargeFooter;
-
             if (footer_mem.len != 0) {
                 footer = try allocator.dupe(u8, footer_mem);
                 posix = try Posix.parse(footer.?);

@@ -1665,7 +1665,7 @@ test "fmtStrftime" {
     const epoch = try instant(.{ .source = .{ .unix_timestamp = 0 } });
     const time = epoch.time();
 
-    var fixed = std.io.Writer.fixed(&buf);
+    var fixed = std.Io.Writer.fixed(&buf);
     var writer = &fixed;
 
     try std.testing.expectError(error.InvalidFormat, time.strftime(writer, "no trailing lone percent %"));
@@ -1716,7 +1716,7 @@ test "fmtStrftime" {
 
 test "gofmt" {
     var buf: [128]u8 = undefined;
-    var fixefixed = std.io.Writer.fixed(&buf);
+    var fixefixed = std.Io.Writer.fixed(&buf);
     var writer = &fixefixed;
 
     const time: Time = .{
@@ -1826,7 +1826,7 @@ test Instant {
     // }
 
     var buf: [128]u8 = undefined;
-    var discarding = std.io.Writer.Discarding.init(&buf);
+    var discarding = std.Io.Writer.Discarding.init(&buf);
     // Format using strftime specifier. Format strings are not required to be comptime
     try dt.strftime(&discarding.writer, "%Y-%m-%d %H:%M:%S %Z");
 
@@ -1859,7 +1859,7 @@ test "github.com/rockorager/zeit/issues/15" {
     const tz = try loadTimeZone(std.testing.allocator, .@"Europe/Berlin", null);
     defer tz.deinit();
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
-    var allocating = std.io.Writer.Allocating.init(std.testing.allocator);
+    var allocating = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer allocating.deinit();
     const time = inst.time();
 
@@ -1885,7 +1885,7 @@ test "github.com/rockorager/zeit/issues/27" {
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
-    var list = std.io.Writer.Allocating.init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
 
     const time = inst.time();
@@ -1899,7 +1899,7 @@ test "github.com/rockorager/zeit/issues/24" {
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
-    var list = std.io.Writer.Allocating.init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
 
     const time = inst.time();
@@ -1917,7 +1917,7 @@ test "github.com/rockorager/zeit/issues/26" {
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
-    var list = std.io.Writer.Allocating.init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
 
     const time = inst.time();

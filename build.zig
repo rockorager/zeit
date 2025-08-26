@@ -4,16 +4,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    _ = b.addModule("zeit", .{
+    const root_module = b.addModule("zeit", .{
         .root_source_file = b.path("src/zeit.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/zeit.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = root_module,
     });
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
@@ -24,9 +22,11 @@ pub fn build(b: *std.Build) void {
     const gen_step = b.step("generate", "Update timezone names");
     const gen = b.addExecutable(.{
         .name = "generate",
-        .root_source_file = b.path("gen/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("gen/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     const fmt = b.addFmt(
         .{ .paths = &.{"src/location.zig"} },
@@ -40,9 +40,11 @@ pub fn build(b: *std.Build) void {
         const docs_step = b.step("docs", "Build the zeit docs");
         const docs_obj = b.addObject(.{
             .name = "zeit",
-            .root_source_file = b.path("src/zeit.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/zeit.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         const docs = docs_obj.getEmittedDocs();
         docs_step.dependOn(&b.addInstallDirectory(.{

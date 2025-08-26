@@ -9,7 +9,7 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
     const data = @embedFile("windowsZones.xml");
 
-    var zones = std.ArrayList(MapZone).init(allocator);
+    var zones: std.ArrayList(MapZone) = .empty;
 
     var read_idx: usize = 0;
     while (read_idx < data.len) {
@@ -52,7 +52,7 @@ pub fn main() !void {
             for (zones.items) |item| {
                 if (std.mem.eql(u8, item.windows, map_zone.windows) and
                     std.mem.eql(u8, item.posix, map_zone.posix)) break;
-            } else try zones.append(map_zone);
+            } else try zones.append(allocator, map_zone);
         }
     }
 
@@ -61,7 +61,9 @@ pub fn main() !void {
     const out = try std.fs.cwd().createFile("src/location.zig", .{});
     defer out.close();
 
-    try writeFile(zones.items, out.writer().any());
+    var output_buffer: [2048]u8 = undefined;
+    var writer = out.writer(&output_buffer);
+    try writeFile(zones.items, &writer.interface);
 }
 
 fn lessThan(_: void, lhs: MapZone, rhs: MapZone) bool {
@@ -74,7 +76,7 @@ const MapZone = struct {
     posix: []const u8,
 };
 
-fn writeFile(items: []const MapZone, writer: std.io.AnyWriter) !void {
+fn writeFile(items: []const MapZone, writer: *std.io.Writer) !void {
     try writer.writeAll(
         \\//!This file is generated. Do not edit directly! Run `zig build generate` to update after obtaining
         \\//!the latest dataset.
@@ -102,4 +104,5 @@ fn writeFile(items: []const MapZone, writer: std.io.AnyWriter) !void {
         try writer.print(".@\"{s}\" => \"{s}\",\n", .{ item.posix, item.windows });
     }
     try writer.writeAll("};}};");
+    try writer.flush(); // don't forget to flush!
 }

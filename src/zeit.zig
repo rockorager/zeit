@@ -45,7 +45,9 @@ pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !T
 
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});
             defer f.close();
-            return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+            var io_buffer: [2048]u8 = undefined;
+            var reader = f.reader(&io_buffer);
+            return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
         },
     }
 }
@@ -69,7 +71,9 @@ fn localFromEnv(
     if (tz[1] == '/') {
         const f = try std.fs.cwd().openFile(tz[1..], .{});
         defer f.close();
-        return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+        var io_buffer: [1024]u8 = undefined;
+        var reader = f.reader(&io_buffer);
+        return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
     }
 
     if (std.meta.stringToEnum(Location, tz[1..])) |loc|
@@ -116,7 +120,9 @@ pub fn loadTimeZone(
     defer dir.close();
     const f = try dir.openFile(loc.asText(), .{});
     defer f.close();
-    return .{ .tzinfo = try timezone.TZInfo.parse(alloc, f.reader()) };
+    var io_buffer: [2048]u8 = undefined;
+    var reader = f.reader(&io_buffer);
+    return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
 }
 
 /// An Instant in time. Instants occur at a precise time and place, thus must
@@ -1846,8 +1852,8 @@ test "github.com/rockorager/zeit/issues/15" {
     const tz = try loadTimeZone(std.testing.allocator, .@"Europe/Berlin", null);
     defer tz.deinit();
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list = std.ArrayList(u8).empty;
+    defer list.deinit(std.testing.allocator);
     const time = inst.time();
 
     try std.testing.expectEqual(timestamp, time.instant().unixTimestamp());
@@ -1859,11 +1865,11 @@ test "github.com/rockorager/zeit/issues/15" {
     try std.testing.expectEqual(58, time.minute);
     try std.testing.expectEqual(20, time.second);
 
-    try time.strftime(list.writer(), "%a %A %u");
+    try time.strftime(list.writer(std.testing.allocator), "%a %A %u");
     try std.testing.expectEqualStrings("Fri Friday 5", list.items);
 
     list.clearRetainingCapacity();
-    try time.gofmt(list.writer(), "Mon Monday");
+    try time.gofmt(list.writer(std.testing.allocator), "Mon Monday");
     try std.testing.expectEqualStrings("Fri Friday", list.items);
 }
 
@@ -1872,12 +1878,12 @@ test "github.com/rockorager/zeit/issues/27" {
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
-    var list: std.ArrayList(u8) = .init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
 
     const time = inst.time();
 
-    try time.gofmt(list.writer(), "02.01.2006");
+    try time.gofmt(list.writer(std.testing.allocator), "02.01.2006");
     try std.testing.expectEqualStrings("23.04.2025", list.items);
 }
 
@@ -1886,16 +1892,16 @@ test "github.com/rockorager/zeit/issues/24" {
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
-    var list: std.ArrayList(u8) = .init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
 
     const time = inst.time();
 
-    try time.gofmt(list.writer(), "3pm MST");
+    try time.gofmt(list.writer(std.testing.allocator), "3pm MST");
     try std.testing.expectEqualStrings("1pm UTC", list.items);
     list.clearRetainingCapacity();
 
-    try time.gofmt(list.writer(), "3p MST");
+    try time.gofmt(list.writer(std.testing.allocator), "3p MST");
     try std.testing.expectEqualStrings("1p UTC", list.items);
 }
 
@@ -1904,15 +1910,15 @@ test "github.com/rockorager/zeit/issues/26" {
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
-    var list: std.ArrayList(u8) = .init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
 
     const time = inst.time();
 
-    try time.gofmt(list.writer(), "02nd");
+    try time.gofmt(list.writer(std.testing.allocator), "02nd");
     try std.testing.expectEqualStrings("23rd", list.items);
     list.clearRetainingCapacity();
 
-    try time.gofmt(list.writer(), "02ND");
+    try time.gofmt(list.writer(std.testing.allocator), "02ND");
     try std.testing.expectEqualStrings("23RD", list.items);
 }

@@ -715,7 +715,6 @@ pub const Windows = struct {
         const LONG = std.os.windows.LONG;
         const USHORT = std.os.windows.USHORT;
         const WCHAR = std.os.windows.WCHAR;
-        const WINAPI = std.os.windows.WINAPI;
         const WORD = std.os.windows.WORD;
 
         const epoch = std.time.epoch.windows;
@@ -756,10 +755,10 @@ pub const Windows = struct {
             DaylightBias: LONG,
         };
 
-        pub extern "advapi32" fn EnumDynamicTimeZoneInformation(dwIndex: DWORD, lpTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
-        pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(WINAPI) DWORD;
-        pub extern "kernel32" fn GetTimeZoneInformationForYear(wYear: USHORT, pdtzi: ?*const DYNAMIC_TIME_ZONE_INFORMATION, ptzi: *TIME_ZONE_INFORMATION) callconv(WINAPI) BOOL;
-        pub extern "kernel32" fn SystemTimeToTzSpecificLocalTimeEx(lpTimeZoneInfo: ?*const DYNAMIC_TIME_ZONE_INFORMATION, lpUniversalTime: *const SYSTEMTIME, lpLocalTime: *SYSTEMTIME) callconv(WINAPI) BOOL;
+        pub extern "advapi32" fn EnumDynamicTimeZoneInformation(dwIndex: DWORD, lpTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(.winapi) DWORD;
+        pub extern "kernel32" fn GetDynamicTimeZoneInformation(pTimeZoneInformation: *DYNAMIC_TIME_ZONE_INFORMATION) callconv(.winapi) DWORD;
+        pub extern "kernel32" fn GetTimeZoneInformationForYear(wYear: USHORT, pdtzi: ?*const DYNAMIC_TIME_ZONE_INFORMATION, ptzi: *TIME_ZONE_INFORMATION) callconv(.winapi) BOOL;
+        pub extern "kernel32" fn SystemTimeToTzSpecificLocalTimeEx(lpTimeZoneInfo: ?*const DYNAMIC_TIME_ZONE_INFORMATION, lpUniversalTime: *const SYSTEMTIME, lpLocalTime: *SYSTEMTIME) callconv(.winapi) BOOL;
     };
 
     zoneinfo: windows.DYNAMIC_TIME_ZONE_INFORMATION,

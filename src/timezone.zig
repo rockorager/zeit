@@ -522,7 +522,7 @@ pub const TZInfo = struct {
         },
     };
 
-    pub fn parse(allocator: std.mem.Allocator, reader: *std.io.Reader) !TZInfo {
+    pub fn parse(allocator: std.mem.Allocator, reader: *std.Io.Reader) !TZInfo {
         var legacy_header = try reader.takeStruct(Header, .big); // handles endianness for us
         if (!std.mem.eql(u8, &legacy_header.magic, "TZif")) return error.BadHeader;
         if (legacy_header.version != 0 and legacy_header.version != '2' and legacy_header.version != '3') return error.BadVersion;
@@ -545,7 +545,7 @@ pub const TZInfo = struct {
         }
     }
 
-    fn parseBlock(allocator: std.mem.Allocator, reader: *std.io.Reader, header: Header, legacy: bool) !TZInfo {
+    fn parseBlock(allocator: std.mem.Allocator, reader: *std.Io.Reader, header: Header, legacy: bool) !TZInfo {
         if (header.counts.isstdcnt != 0 and header.counts.isstdcnt != header.counts.typecnt) return error.Malformed; // rfc8536: isstdcnt [...] MUST either be zero or equal to "typecnt"
         if (header.counts.isutcnt != 0 and header.counts.isutcnt != header.counts.typecnt) return error.Malformed; // rfc8536: isutcnt [...] MUST either be zero or equal to "typecnt"
         if (header.counts.typecnt == 0) return error.Malformed; // rfc8536: typecnt [...] MUST NOT be zero

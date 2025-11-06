@@ -1077,7 +1077,7 @@ pub const Time = struct {
     }
 
     /// Format time using strftime(3) specified, eg %Y-%m-%dT%H:%M:%S
-    pub fn strftime(self: Time, writer: anytype, fmt: []const u8) !void {
+    pub fn strftime(self: Time, writer: *std.Io.Writer, fmt: []const u8) !void {
         const inst = self.instant();
         var i: usize = 0;
         while (i < fmt.len) {
@@ -1245,7 +1245,7 @@ pub const Time = struct {
     }
 
     /// Format using golang magic date format.
-    pub fn gofmt(self: Time, writer: anytype, fmt: []const u8) !void {
+    pub fn gofmt(self: Time, writer: *std.Io.Writer, fmt: []const u8) !void {
         var i: usize = 0;
         while (i < fmt.len) : (i += 1) {
             const b = fmt[i];

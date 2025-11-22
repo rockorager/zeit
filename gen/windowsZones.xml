@@ -409,14 +409,14 @@ For terms of use, see http://www.unicode.org/copyright.html
 			<mapZone other="South Africa Standard Time" territory="ZZ" type="Etc/GMT-2"/>
 
 			<!-- (UTC+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius -->
-			<mapZone other="FLE Standard Time" territory="001" type="Europe/Kiev"/>
+			<mapZone other="FLE Standard Time" territory="001" type="Europe/Kyiv"/>
 			<mapZone other="FLE Standard Time" territory="AX" type="Europe/Mariehamn"/>
 			<mapZone other="FLE Standard Time" territory="BG" type="Europe/Sofia"/>
 			<mapZone other="FLE Standard Time" territory="EE" type="Europe/Tallinn"/>
 			<mapZone other="FLE Standard Time" territory="FI" type="Europe/Helsinki"/>
 			<mapZone other="FLE Standard Time" territory="LT" type="Europe/Vilnius"/>
 			<mapZone other="FLE Standard Time" territory="LV" type="Europe/Riga"/>
-			<mapZone other="FLE Standard Time" territory="UA" type="Europe/Kiev"/>
+			<mapZone other="FLE Standard Time" territory="UA" type="Europe/Kyiv"/>
 
 			<!-- (UTC+02:00) Jerusalem -->
 			<mapZone other="Israel Standard Time" territory="001" type="Asia/Jerusalem"/>

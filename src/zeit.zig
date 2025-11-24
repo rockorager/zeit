@@ -175,7 +175,8 @@ pub const Instant = struct {
         /// ISO8601 but is more strict, and allows for arbitrary fractional
         /// seconds. Using this field will use the same parser `iso8601`, but is
         /// provided for clarity
-        /// Format: YYYY-MM-DDTHH:MM:SS.sss+hh:mm
+        /// has nanoseconds precision (9 digits after period), same as rfc3339Nano could be
+        /// Format: YYYY-MM-DDTHH:MM:SS.s{,9}+hh:mm
         rfc3339: []const u8,
 
         /// Parse a datetime from an RFC5322 date-time spec
@@ -1020,6 +1021,7 @@ pub const Time = struct {
 
     pub const Format = union(enum) {
         rfc3339, // YYYY-MM-DD-THH:MM:SS.sss+00:00
+        rfc3339Nano, // YYYY-MM-DD-THH:MM:SS.sssssssss+00:00, has 9 digits after period, nanos precision
     };
 
     pub fn bufPrint(self: Time, buf: []u8, fmt: Format) ![]u8 {
@@ -1055,6 +1057,48 @@ pub const Time = struct {
                             self.minute,
                             self.second,
                             self.millisecond,
+                            sign,
+                            h,
+                            min,
+                        },
+                    );
+                }
+            },
+            .rfc3339Nano => {
+                if (self.year < 0) return error.InvalidTime;
+                if (self.offset == 0)
+                    return std.fmt.bufPrint(
+                        buf,
+                        "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}.{d:0>3}{d:0>3}{d:0>3}Z",
+                        .{
+                            @as(u32, @intCast(self.year)),
+                            @intFromEnum(self.month),
+                            self.day,
+                            self.hour,
+                            self.minute,
+                            self.second,
+                            self.millisecond,
+                            self.microsecond,
+                            self.nanosecond,
+                        },
+                    )
+                else {
+                    const h = @divFloor(@abs(self.offset), s_per_hour);
+                    const min = @divFloor(@abs(self.offset) - h * s_per_hour, s_per_min);
+                    const sign: u8 = if (self.offset > 0) '+' else '-';
+                    return std.fmt.bufPrint(
+                        buf,
+                        "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}.{d:0>3}{d:0>3}{d:0>3}{c}{d:0>2}:{d:0>2}",
+                        .{
+                            @as(u32, @intCast(self.year)),
+                            @intFromEnum(self.month),
+                            self.day,
+                            self.hour,
+                            self.minute,
+                            self.second,
+                            self.millisecond,
+                            self.microsecond,
+                            self.nanosecond,
                             sign,
                             h,
                             min,
@@ -1921,4 +1965,30 @@ test "github.com/rockorager/zeit/issues/26" {
 
     try time.gofmt(list.writer(std.testing.allocator), "02ND");
     try std.testing.expectEqualStrings("23RD", list.items);
+}
+
+test "bufPrintRFC3339Nano" {
+    const Case = struct {
+        timestamp: []const u8,
+    };
+    const cases = [_]Case{
+        .{ .timestamp = "2023-01-15T23:45:51.123456789Z" },
+        .{ .timestamp = "2023-01-15T23:45:51.000000789Z" },
+    };
+    for (cases) |case| {
+        const iso = try instant(.{
+            .source = .{
+                .rfc3339 = case.timestamp,
+            },
+        });
+        const ns = iso.timestamp;
+        const zNs = try instant(.{
+            .source = .{
+                .unix_nano = ns,
+            },
+        });
+        var timeBuf: [30]u8 = undefined;
+        const time = try zNs.time().bufPrint(&timeBuf, .rfc3339Nano);
+        try std.testing.expectEqualStrings(case.timestamp, time);
+    }
 }

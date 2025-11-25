@@ -1590,14 +1590,13 @@ pub fn isLeapYear(year: i32) bool {
 /// returns the weekday given a number of days since the unix epoch
 /// https://howardhinnant.github.io/date_algorithms.html#weekday_from_days
 pub fn weekdayFromDays(days: Days) Weekday {
-    if (days >= -4)
-        return @enumFromInt(@mod((days + 4), 7))
-    else
-        return @enumFromInt(@mod((days + 5), 7) + 6);
+    return @enumFromInt(@mod((days + 4), 7));
 }
 
 test "weekdayFromDays" {
     try std.testing.expectEqual(.thu, weekdayFromDays(0));
+    try std.testing.expectEqual(.sat, weekdayFromDays(-5));
+    try std.testing.expectEqual(.wed, weekdayFromDays(-8));
 }
 
 /// return the civil date from the number of days since the epoch
@@ -1608,12 +1607,11 @@ pub fn civilFromDays(days: Days) Date {
     const z = days + 719468;
 
     // Compute era
-    const era = if (z >= 0)
-        @divFloor(z, days_per_era)
-    else
-        @divFloor(z - days_per_era - 1, days_per_era);
+    const era = @divFloor(z, days_per_era);
 
     const doe: u32 = @intCast(z - era * days_per_era); // [0, days_per_era-1]
+    assert(doe >= 0 and doe < days_per_era);
+
     const yoe: u32 = @intCast(
         @divFloor(
             doe -
@@ -1623,6 +1621,7 @@ pub fn civilFromDays(days: Days) Date {
             365,
         ),
     ); // [0, 399]
+    assert(yoe >= 0 and yoe < 400);
     const y: i32 = @intCast(yoe + era * 400);
     const doy = doe - (365 * yoe + @divFloor(yoe, 4) - @divFloor(yoe, 100)); // [0, 365]
     const mp = @divFloor(5 * doy + 2, 153); // [0, 11]
@@ -1634,12 +1633,20 @@ pub fn civilFromDays(days: Days) Date {
         .day = @truncate(d),
     };
 }
+
+test "civilFromDays" {
+    // trigger a doe and yoe range asserts if the era is not computed correctly
+    try std.testing.expectEqual(0, civilFromDays(-719469).year);
+    try std.testing.expectEqual(1970, civilFromDays(0).year);
+}
+
 /// return the number of days since the epoch from the civil date
 pub fn daysFromCivil(date: Date) Days {
     const m = @intFromEnum(date.month);
     const y = if (m <= 2) date.year - 1 else date.year;
-    const era = if (y >= 0) @divFloor(y, 400) else @divFloor(y - 399, 400);
+    const era = @divFloor(y, 400);
     const yoe: u32 = @intCast(y - era * 400);
+    assert(yoe >= 0 and yoe < 400);
     const doy = blk: {
         const a: u32 = if (m > 2) m - 3 else m + 9;
         const b = a * 153 + 2;
@@ -1647,6 +1654,18 @@ pub fn daysFromCivil(date: Date) Days {
     };
     const doe: i32 = @intCast(yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy);
     return era * days_per_era + doe - 719468;
+}
+
+test "daysFromCivil" {
+    // -1 is not a leap year, so Feb 28th and Mar 1st should be 1 day apart
+    try std.testing.expectEqual(false, isLeapYear(-1));
+    try std.testing.expectEqual(
+        1,
+        daysFromCivil(.{ .year = -1, .month = .mar, .day = 1 }) -
+            daysFromCivil(.{ .year = -1, .month = .feb, .day = 28 }),
+    );
+
+    try std.testing.expectEqual(-719893, daysFromCivil(.{ .year = -1, .month = .jan, .day = 1 }));
 }
 
 test {

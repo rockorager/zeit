@@ -2,6 +2,13 @@
 
 A time library written in zig.
 
+## Install 
+```
+zig fetch --save git+https://github.com/rockorager/zeit?ref=main
+```
+
+Or install a [tag](https://github.com/rockorager/zeit/tags) instead of main.
+
 ## Usage
 
 [API Documentation](https://rockorager.github.io/zeit/)

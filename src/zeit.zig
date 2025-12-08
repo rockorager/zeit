@@ -900,14 +900,93 @@ pub const Time = struct {
             }
             // consume whitespace
             while (i < eml.len and std.ascii.isWhitespace(eml[i])) : (i += 1) {}
-            assert(i + 5 <= eml.len);
-            const hours = try parseInt(i32, eml[i .. i + 3], 10);
-            const minutes = try parseInt(i32, eml[i + 3 .. i + 5], 10);
-            const offset_minutes: i32 = if (hours > 0)
-                hours * 60 + minutes
-            else
-                hours * 60 - minutes;
-            time.offset = offset_minutes * 60;
+            switch (eml.len - i) {
+                else => {
+                    const hours = try parseInt(i32, eml[i .. i + 3], 10);
+                    const minutes = try parseInt(i32, eml[i + 3 .. i + 5], 10);
+                    const offset_minutes: i32 = if (hours > 0)
+                        hours * 60 + minutes
+                    else
+                        hours * 60 - minutes;
+                    time.offset = offset_minutes * 60;
+                },
+                4 => return error.InvalidFormat, // No formats should have a 4 character zone
+                3 => {
+                    const ObsoleteZoneParseState = enum {
+                        start,
+                        g,
+                        gm,
+                        e,
+                        ed,
+                        es,
+                        c,
+                        cs,
+                        cd,
+                        m,
+                        ms,
+                        md,
+                        p,
+                        ps,
+                        pd,
+                        invalid,
+                    };
+                    // The last of all should be 'T'
+                    if (eml[i + 2] != 'T') return error.InvalidFormat;
+                    parse: switch (ObsoleteZoneParseState.start) {
+                        .start => switch (eml[i]) {
+                            'G' => continue :parse .g,
+                            'E' => continue :parse .e,
+                            'C' => continue :parse .c,
+                            'M' => continue :parse .m,
+                            'P' => continue :parse .p,
+                            else => return error.InvalidFormat,
+                        },
+                        .g => if (eml[i + 1] == 'M') continue :parse .gm else continue :parse .invalid,
+                        .e => if (eml[i + 1] == 'D') continue :parse .ed else if (eml[i + 1] == 'S') continue :parse .es else continue :parse .invalid,
+                        .c => if (eml[i + 1] == 'D') continue :parse .cd else if (eml[i + 1] == 'S') continue :parse .cs else continue :parse .invalid,
+                        .m => if (eml[i + 1] == 'D') continue :parse .md else if (eml[i + 1] == 'S') continue :parse .ms else continue :parse .invalid,
+                        .p => if (eml[i + 1] == 'D') continue :parse .pd else if (eml[i + 1] == 'S') continue :parse .ps else continue :parse .invalid,
+                        .gm => {
+                            time.offset = 0;
+                        },
+                        .ed => {
+                            time.offset = -4 * 3600;
+                        },
+                        .es, .cd => {
+                            time.offset = -5 * 3600;
+                        },
+                        .cs, .md => {
+                            time.offset = -6 * 3600;
+                        },
+                        .ms, .pd => {
+                            time.offset = -7 * 3600;
+                        },
+                        .ps => {
+                            time.offset = -8 * 3600;
+                        },
+                        .invalid => return error.InvalidFormat,
+                    }
+                },
+                2 => {
+                    if (eml[i] == 'U' and eml[i + 1] == 'T') {
+                        time.offset = 0;
+                    } else {
+                        return error.InvalidFormat;
+                    }
+                },
+                1 => {
+                    switch (eml[i]) {
+                        'Z', 'z' => time.offset = 0,
+                        'A'...'I' => time.offset = (@as(i32, eml[i] - 'A') + 1) * 3600,
+                        'a'...'i' => time.offset = (@as(i32, eml[i] - 'a') + 1) * 3600,
+                        'K'...'M' => time.offset = (@as(i32, eml[i] - 'A')) * 3600, // J is skipped, already offset by 1
+                        'k'...'m' => time.offset = (@as(i32, eml[i] - 'a')) * 3600, // j is skipped, already offset by 1
+                        'N'...'Y' => time.offset = -((@as(i32, eml[i] - 'N') + 1) * 3600),
+                        'n'...'y' => time.offset = -((@as(i32, eml[i] - 'n') + 1) * 3600),
+                        else => return error.InvalidFormat,
+                    }
+                },
+            }
         }
         return time;
     }
@@ -933,6 +1012,46 @@ pub const Time = struct {
             try std.testing.expectEqual(32, time.minute);
             try std.testing.expectEqual(54, time.second);
             try std.testing.expectEqual(-12_600, time.offset);
+        }
+        {
+            const Test = struct {
+                name: []const u8,
+                value: i32,
+            };
+            const tests = [_]Test{
+                .{ .name = "UT", .value = 0 },
+                .{ .name = "GMT", .value = 0 },
+                .{ .name = "EDT", .value = -4 * 3600 },
+                .{ .name = "EST", .value = -5 * 3600 },
+                .{ .name = "I", .value = 9 * 3600 },
+                .{ .name = "K", .value = 10 * 3600 },
+                .{ .name = "M", .value = 12 * 3600 },
+                .{ .name = "n", .value = -1 * 3600 },
+                .{ .name = "y", .value = -12 * 3600 },
+                .{ .name = "z", .value = 0 },
+                .{ .name = "Z", .value = 0 },
+            };
+            for (tests) |t| {
+                var buf: [64]u8 = undefined;
+                const rfc5322_str = std.fmt.bufPrint(&buf, "Thu, 13 Feb 1969 23:32:54 {s}", .{t.name}) catch unreachable;
+                const time = try Time.fromRFC5322(rfc5322_str);
+                try std.testing.expectEqual(1969, time.year);
+                try std.testing.expectEqual(.feb, time.month);
+                try std.testing.expectEqual(13, time.day);
+                try std.testing.expectEqual(23, time.hour);
+                try std.testing.expectEqual(32, time.minute);
+                try std.testing.expectEqual(54, time.second);
+                try std.testing.expectEqual(t.value, time.offset);
+            }
+
+            try std.testing.expectError(
+                error.InvalidFormat,
+                Time.fromRFC5322("Thu, 13 Feb 1969 23:32:54 XYZ"),
+            );
+            try std.testing.expectError(
+                error.InvalidFormat,
+                Time.fromRFC5322("Thu, 13 Feb 1969 23:32:54 J"), // J is not allowed in Military timezones
+            );
         }
     }
 

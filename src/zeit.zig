@@ -1790,38 +1790,52 @@ test "weekdayFromDays" {
     try std.testing.expectEqual(.wed, weekdayFromDays(-8));
 }
 
-/// return the civil date from the number of days since the epoch
-/// This is an implementation of Howard Hinnant's algorithm
-/// https://howardhinnant.github.io/date_algorithms.html#civil_from_days
+/// Ben Joffe's very fast 64-bit date algorithm
+/// https://www.benjoffe.com/fast-date-64
 pub fn civilFromDays(days: Days) Date {
-    // shift epoch from 1970-01-01 to 0000-03-01
-    const z = days + 719468;
+    const is_arm = builtin.cpu.arch == .aarch64 or builtin.cpu.arch == .arm;
 
-    // Compute era
-    const era = @divFloor(z, days_per_era);
+    const eras: u64 = 4726498270;
+    const d_shift: u64 = 146097 * eras - 719469;
+    const y_shift: u64 = 400 * eras - 1;
+    const scale: u64 = if (is_arm) 1 else 32;
+    const shift_0: u64 = 30556 * scale;
+    const shift_1: u64 = 5980 * scale;
+    const c1: u64 = 505054698555331;
+    const c2: u64 = 50504432782230121;
+    const c3: u64 = 8619973866219416 * 32 / scale;
 
-    const doe: u32 = @intCast(z - era * days_per_era); // [0, days_per_era-1]
-    assert(doe >= 0 and doe < days_per_era);
+    // Adjust for 100/400 leap year rule, reverse day count
+    const rev: u64 = d_shift -% @as(u64, @bitCast(@as(i64, days)));
+    const cen: u64 = @truncate(@as(u128, c1) * rev >> 64);
+    const jul: u64 = rev +% cen -% cen / 4;
 
-    const yoe: u32 = @intCast(
-        @divFloor(
-            doe -
-                @divFloor(doe, 1460) +
-                @divFloor(doe, 36524) -
-                @divFloor(doe, 146096),
-            365,
-        ),
-    ); // [0, 399]
-    assert(yoe >= 0 and yoe < 400);
-    const y: i32 = @as(i32, @intCast(yoe)) + era * 400;
-    const doy = doe - (365 * yoe + @divFloor(yoe, 4) - @divFloor(yoe, 100)); // [0, 365]
-    const mp = @divFloor(5 * doy + 2, 153); // [0, 11]
-    const d = doy - @divFloor(153 * mp + 2, 5) + 1; // [1, 31]
-    const m = if (mp < 10) mp + 3 else mp - 9; // [1, 12]
+    // Determine year and year-part
+    const num: u128 = @as(u128, c2) * jul;
+    const yrs: u64 = y_shift -% @as(u64, @truncate(num >> 64));
+    const low: u64 = @truncate(num);
+    const ypt: u64 = @truncate(@as(u128, 24451 * scale) * low >> 64);
+
+    // Year-modulo-bitshift for leap years
+    const bump: u64, const shift: u64, const month: u64 = if (is_arm) blk: {
+        const s: u64 = shift_0;
+        const n: u64 = (yrs % 4) * (16 * scale) +% s -% ypt;
+        const m: u64 = n / (2048 * scale);
+        break :blk .{ if (m > 12) 1 else 0, s, if (m > 12) m - 12 else m };
+    } else blk: {
+        const b: u64 = if (ypt < 3952 * scale) 1 else 0;
+        const s: u64 = if (b == 1) shift_1 else shift_0;
+        const n: u64 = (yrs % 4) * (16 * scale) +% s -% ypt;
+        break :blk .{ b, s, n / (2048 * scale) };
+    };
+
+    const n: u64 = (yrs % 4) * (16 * scale) +% shift -% ypt;
+    const day: u64 = @truncate(@as(u128, c3) * (n % (2048 * scale)) >> 64);
+
     return .{
-        .year = if (m <= 2) y + 1 else y,
-        .month = @enumFromInt(m),
-        .day = @truncate(d),
+        .year = @intCast(@as(i64, @bitCast(yrs)) + @as(i64, @intCast(bump))),
+        .month = @enumFromInt(month),
+        .day = @intCast(day + 1),
     };
 }
 

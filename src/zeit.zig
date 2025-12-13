@@ -837,6 +837,15 @@ pub const Time = struct {
         }
     }
 
+    /// Parse an RFC 5322 date-time string (e.g., "Thu, 13 Feb 1969 23:32:54 -0330").
+    ///
+    /// Supports obsolete timezone names from RFC 5322 section 4.3:
+    /// - UT, GMT: UTC (+0000)
+    /// - US timezones: EST/EDT, CST/CDT, MST/MDT, PST/PDT
+    /// - Single-letter military timezones (A-I, K-M, N-Y, Z)
+    ///
+    /// Note: Military timezones use conventional offsets (A=+1, N=-1, etc.) rather than
+    /// RFC 5322's recommendation to treat them as "-0000" (unknown offset).
     pub fn fromRFC5322(eml: []const u8) !Time {
         const parseInt = std.fmt.parseInt;
         var time: Time = .{};
@@ -930,10 +939,13 @@ pub const Time = struct {
                         pd,
                         invalid,
                     };
+                    const first = std.ascii.toUpper(eml[i]);
+                    const second = std.ascii.toUpper(eml[i + 1]);
+                    const third = std.ascii.toUpper(eml[i + 2]);
                     // The last of all should be 'T'
-                    if (eml[i + 2] != 'T') return error.InvalidFormat;
+                    if (third != 'T') return error.InvalidFormat;
                     parse: switch (ObsoleteZoneParseState.start) {
-                        .start => switch (eml[i]) {
+                        .start => switch (first) {
                             'G' => continue :parse .g,
                             'E' => continue :parse .e,
                             'C' => continue :parse .c,
@@ -941,11 +953,11 @@ pub const Time = struct {
                             'P' => continue :parse .p,
                             else => return error.InvalidFormat,
                         },
-                        .g => if (eml[i + 1] == 'M') continue :parse .gm else continue :parse .invalid,
-                        .e => if (eml[i + 1] == 'D') continue :parse .ed else if (eml[i + 1] == 'S') continue :parse .es else continue :parse .invalid,
-                        .c => if (eml[i + 1] == 'D') continue :parse .cd else if (eml[i + 1] == 'S') continue :parse .cs else continue :parse .invalid,
-                        .m => if (eml[i + 1] == 'D') continue :parse .md else if (eml[i + 1] == 'S') continue :parse .ms else continue :parse .invalid,
-                        .p => if (eml[i + 1] == 'D') continue :parse .pd else if (eml[i + 1] == 'S') continue :parse .ps else continue :parse .invalid,
+                        .g => if (second == 'M') continue :parse .gm else continue :parse .invalid,
+                        .e => if (second == 'D') continue :parse .ed else if (second == 'S') continue :parse .es else continue :parse .invalid,
+                        .c => if (second == 'D') continue :parse .cd else if (second == 'S') continue :parse .cs else continue :parse .invalid,
+                        .m => if (second == 'D') continue :parse .md else if (second == 'S') continue :parse .ms else continue :parse .invalid,
+                        .p => if (second == 'D') continue :parse .pd else if (second == 'S') continue :parse .ps else continue :parse .invalid,
                         .gm => {
                             time.offset = 0;
                         },
@@ -968,7 +980,7 @@ pub const Time = struct {
                     }
                 },
                 2 => {
-                    if (eml[i] == 'U' and eml[i + 1] == 'T') {
+                    if (std.ascii.toUpper(eml[i]) == 'U' and std.ascii.toUpper(eml[i + 1]) == 'T') {
                         time.offset = 0;
                     } else {
                         return error.InvalidFormat;
@@ -1020,9 +1032,25 @@ pub const Time = struct {
             };
             const tests = [_]Test{
                 .{ .name = "UT", .value = 0 },
+                .{ .name = "ut", .value = 0 },
                 .{ .name = "GMT", .value = 0 },
+                .{ .name = "gmt", .value = 0 },
                 .{ .name = "EDT", .value = -4 * 3600 },
+                .{ .name = "edt", .value = -4 * 3600 },
                 .{ .name = "EST", .value = -5 * 3600 },
+                .{ .name = "est", .value = -5 * 3600 },
+                .{ .name = "CDT", .value = -5 * 3600 },
+                .{ .name = "cdt", .value = -5 * 3600 },
+                .{ .name = "CST", .value = -6 * 3600 },
+                .{ .name = "cst", .value = -6 * 3600 },
+                .{ .name = "MDT", .value = -6 * 3600 },
+                .{ .name = "mdt", .value = -6 * 3600 },
+                .{ .name = "MST", .value = -7 * 3600 },
+                .{ .name = "mst", .value = -7 * 3600 },
+                .{ .name = "PDT", .value = -7 * 3600 },
+                .{ .name = "pdt", .value = -7 * 3600 },
+                .{ .name = "PST", .value = -8 * 3600 },
+                .{ .name = "pst", .value = -8 * 3600 },
                 .{ .name = "I", .value = 9 * 3600 },
                 .{ .name = "K", .value = 10 * 3600 },
                 .{ .name = "M", .value = 12 * 3600 },

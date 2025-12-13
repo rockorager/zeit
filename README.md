@@ -22,8 +22,13 @@ pub fn main() void {
     var env = try std.process.getEnvMap(allocator);
     defer env.deinit();
 
-    // Get an instant in time. The default gets "now" in UTC
-    const now = try zeit.instant(.{});
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    var io = threaded.io();
+    defer io.deinit();
+
+    // Get an instant in time. The default gets "now" in UTC,
+    // and requires io to read from the system clock
+    const now = try zeit.instant(.{ .io = io });
 
     // Load our local timezone. This needs an allocator. Optionally pass in a
     // *const std.process.EnvMap to support TZ and TZDIR environment variables
@@ -63,7 +68,7 @@ pub fn main() void {
     const vienna = try zeit.loadTimeZone(alloc, .@"Europe/Vienna", &env);
     defer vienna.deinit();
 
-    // Parse an Instant from an ISO8601 or RFC3339 string
+    // Parse an Instant from an ISO8601 or RFC3339 string. io is not needed
     const iso = try zeit.instant(.{
 	.source = .{
 	    .iso8601 = "2024-03-16T08:38:29.496-1200",

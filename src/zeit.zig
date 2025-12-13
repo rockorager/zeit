@@ -30,7 +30,7 @@ pub const utc: TimeZone = .{ .fixed = .{
     .is_dst = false,
 } };
 
-pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !TimeZone {
+pub fn local(alloc: std.mem.Allocator, io: std.Io, maybe_env: ?*const std.process.EnvMap) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
             const win = try timezone.Windows.local(alloc);
@@ -39,14 +39,14 @@ pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !T
         else => {
             if (maybe_env) |env| {
                 if (env.get("TZ")) |tz| {
-                    return localFromEnv(alloc, tz, env);
+                    return localFromEnv(alloc, io, tz, env);
                 }
             }
 
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});
             defer f.close();
             var io_buffer: [2048]u8 = undefined;
-            var reader = f.reader(&io_buffer);
+            var reader = f.reader(io, &io_buffer);
             return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
         },
     }
@@ -59,6 +59,7 @@ pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !T
 // 3. A relative path, prefixed with ':'
 fn localFromEnv(
     alloc: std.mem.Allocator,
+    io: std.Io,
     tz: []const u8,
     env: *const std.process.EnvMap,
 ) !TimeZone {
@@ -72,18 +73,19 @@ fn localFromEnv(
         const f = try std.fs.cwd().openFile(tz[1..], .{});
         defer f.close();
         var io_buffer: [1024]u8 = undefined;
-        var reader = f.reader(&io_buffer);
+        var reader = f.reader(io, &io_buffer);
         return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
     }
 
     if (std.meta.stringToEnum(Location, tz[1..])) |loc|
-        return loadTimeZone(alloc, loc, env)
+        return loadTimeZone(alloc, io, loc, env)
     else
         return error.UnknownLocation;
 }
 
 pub fn loadTimeZone(
     alloc: std.mem.Allocator,
+    io: std.Io,
     loc: Location,
     maybe_env: ?*const std.process.EnvMap,
 ) !TimeZone {
@@ -121,7 +123,7 @@ pub fn loadTimeZone(
     const f = try dir.openFile(loc.asText(), .{});
     defer f.close();
     var io_buffer: [2048]u8 = undefined;
-    var reader = f.reader(&io_buffer);
+    var reader = f.reader(io, &io_buffer);
     return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
 }
 
@@ -136,11 +138,13 @@ pub const Instant = struct {
     pub const Config = struct {
         source: Source = .now,
         timezone: *const TimeZone = &utc,
+        /// io required when capturing current time (e.g. zeit.instant(.{ .io = io }))
+        io: ?std.Io = null,
     };
 
     /// possible sources to create an Instant
     pub const Source = union(enum) {
-        /// the current system time
+        /// the current system time (requires io in Config)
         now,
 
         /// a specific unix timestamp (in seconds)
@@ -272,7 +276,11 @@ pub const Instant = struct {
 /// create a new Instant
 pub fn instant(cfg: Instant.Config) !Instant {
     const ts: Nanoseconds = switch (cfg.source) {
-        .now => std.time.nanoTimestamp(),
+        .now => blk: {
+            const io = cfg.io orelse return error.IoRequired;
+            const now = try std.Io.Clock.Timestamp.now(io, .awake);
+            break :blk now.raw.nanoseconds;
+        },
         .unix_timestamp => |unix| @as(i128, unix) * ns_per_s,
         .unix_nano => |nano| nano,
         .time => |time| time.instant().timestamp,
@@ -300,8 +308,11 @@ pub fn instant(cfg: Instant.Config) !Instant {
 }
 
 test "instant" {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    const now = try std.Io.Clock.Timestamp.now(io, .awake);
     const original = Instant{
-        .timestamp = std.time.nanoTimestamp(),
+        .timestamp = now.raw.nanoseconds,
         .timezone = &utc,
     };
     const time = original.time();
@@ -1257,7 +1268,7 @@ pub const Time = struct {
     }
 
     /// Format time using strftime(3) specified, eg %Y-%m-%dT%H:%M:%S
-    pub fn strftime(self: Time, writer: anytype, fmt: []const u8) !void {
+    pub fn strftime(self: Time, writer: *std.Io.Writer, fmt: []const u8) !void {
         const inst = self.instant();
         var i: usize = 0;
         while (i < fmt.len) {
@@ -1425,7 +1436,7 @@ pub const Time = struct {
     }
 
     /// Format using golang magic date format.
-    pub fn gofmt(self: Time, writer: anytype, fmt: []const u8) !void {
+    pub fn gofmt(self: Time, writer: *std.Io.Writer, fmt: []const u8) !void {
         var i: usize = 0;
         while (i < fmt.len) : (i += 1) {
             const b = fmt[i];
@@ -1644,7 +1655,7 @@ pub const Time = struct {
                             );
                             try writer.writeAll(str[0..@min(n, str.len)]);
                             if (n > str.len)
-                                try writer.writeByteNTimes('0', n - str.len);
+                                try writer.splatBytesAll("0", n - str.len);
                         },
                         '9' => {
                             var n: usize = 0;
@@ -1881,59 +1892,57 @@ test "fmtStrftime" {
     const epoch = try instant(.{ .source = .{ .unix_timestamp = 0 } });
     const time = epoch.time();
 
-    var fbs = std.io.fixedBufferStream(&buf);
-    const writer = fbs.writer();
+    var writer = std.Io.Writer.fixed(&buf);
 
-    try std.testing.expectError(error.InvalidFormat, time.strftime(writer, "no trailing lone percent %"));
+    try std.testing.expectError(error.InvalidFormat, time.strftime(&writer, "no trailing lone percent %"));
 
-    fbs.reset();
-    try time.strftime(writer, "%%");
-    try std.testing.expectEqualStrings("%", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%%");
+    try std.testing.expectEqualStrings("%", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%a %A %b %B %c %C");
-    try std.testing.expectEqualStrings("Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%a %A %b %B %c %C");
+    try std.testing.expectEqualStrings("Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%d %D %e %F %h");
-    try std.testing.expectEqualStrings("01 01/01/70  1 1970-01-01 Jan", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%d %D %e %F %h");
+    try std.testing.expectEqualStrings("01 01/01/70  1 1970-01-01 Jan", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%H %I %j %k %l %m %M");
-    try std.testing.expectEqualStrings("00 12 001 0 12 01 00", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%H %I %j %k %l %m %M");
+    try std.testing.expectEqualStrings("00 12 001 0 12 01 00", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%p %P %r %R %s %S");
-    try std.testing.expectEqualStrings("AM am 12:00:00 AM 00:00 0 00", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%p %P %r %R %s %S");
+    try std.testing.expectEqualStrings("AM am 12:00:00 AM 00:00 0 00", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%T %u");
-    try std.testing.expectEqualStrings("00:00:00 4", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%T %u");
+    try std.testing.expectEqualStrings("00:00:00 4", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%U");
-    try std.testing.expectEqualStrings("00", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%U");
+    try std.testing.expectEqualStrings("00", writer.buffered());
 
-    fbs.reset();
+    writer.end = 0;
     const d2 = (try time.instant().add(.{ .days = 3 })).time();
-    try d2.strftime(writer, "%U");
-    try std.testing.expectEqualStrings("01", fbs.getWritten());
+    try d2.strftime(&writer, "%U");
+    try std.testing.expectEqualStrings("01", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%w %W %x %X %y %Y %z %Z");
-    try std.testing.expectEqualStrings("4 00 01/01/70 00:00:00 70 1970 +0000 UTC", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%w %W %x %X %y %Y %z %Z");
+    try std.testing.expectEqualStrings("4 00 01/01/70 00:00:00 70 1970 +0000 UTC", writer.buffered());
 
-    fbs.reset();
+    writer.end = 0;
     var d3 = time;
     d3.offset = -3600;
-    try d3.strftime(writer, "%z");
-    try std.testing.expectEqualStrings("-0100", fbs.getWritten());
+    try d3.strftime(&writer, "%z");
+    try std.testing.expectEqualStrings("-0100", writer.buffered());
 }
 
 test "gofmt" {
     var buf: [128]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&buf);
-    const writer = fbs.writer();
+    var writer = std.Io.Writer.fixed(&buf);
 
     const time: Time = .{
         .year = 1970,
@@ -1942,17 +1951,17 @@ test "gofmt" {
         .designation = "UTC",
     };
 
-    fbs.reset();
-    try time.gofmt(writer, "Jan January J 01 02 03 04 05 06 002 Jan");
-    try std.testing.expectEqualStrings("Feb February J 02 03 12 00 00 70 034 Feb", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "Jan January J 01 02 03 04 05 06 002 Jan");
+    try std.testing.expectEqualStrings("Feb February J 02 03 12 00 00 70 034 Feb", writer.buffered());
 
-    fbs.reset();
-    try time.gofmt(writer, "Mon Monday MST M 1 15 2 2006 _2 __2 Mon");
-    try std.testing.expectEqualStrings("Tue Tuesday UTC M 2 00 3 1970  3  34 Tue", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "Mon Monday MST M 1 15 2 2006 _2 __2 Mon");
+    try std.testing.expectEqualStrings("Tue Tuesday UTC M 2 00 3 1970  3  34 Tue", writer.buffered());
 
-    fbs.reset();
-    try time.gofmt(writer, "3 4 5");
-    try std.testing.expectEqualStrings("12 0 0", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "3 4 5");
+    try std.testing.expectEqualStrings("12 0 0", writer.buffered());
 
     const time2: Time = .{
         .offset = 3661, // 1 hour, 1 minute, 1 second
@@ -1961,37 +1970,37 @@ test "gofmt" {
         .nanosecond = 789,
     };
 
-    fbs.reset();
-    try time2.gofmt(writer, "-070000 -07:00:00 -0700 -07:00 -07 -00");
-    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 -00", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "-070000 -07:00:00 -0700 -07:00 -07 -00");
+    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 -00", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
-    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 Z00", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
+    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 Z00", writer.buffered());
 
-    fbs.reset();
-    try time.gofmt(writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
-    try std.testing.expectEqualStrings("Z Z Z Z Z Z00", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
+    try std.testing.expectEqualStrings("Z Z Z Z Z Z00", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .");
-    try std.testing.expectEqualStrings("frac .", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .");
+    try std.testing.expectEqualStrings("frac .", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .000000000");
-    try std.testing.expectEqualStrings("frac .123456789", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .000000000");
+    try std.testing.expectEqualStrings("frac .123456789", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .999999999");
-    try std.testing.expectEqualStrings("frac .123456789", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .999999999");
+    try std.testing.expectEqualStrings("frac .123456789", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .000000000000");
-    try std.testing.expectEqualStrings("frac .123456789000", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .000000000000");
+    try std.testing.expectEqualStrings("frac .123456789000", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .0000000");
-    try std.testing.expectEqualStrings("frac .1234567", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .0000000");
+    try std.testing.expectEqualStrings("frac .1234567", writer.buffered());
 
     const time3: Time = .{
         .offset = 3661, // 1 hour, 1 minute, 1 second
@@ -1999,9 +2008,9 @@ test "gofmt" {
         .microsecond = 456,
     };
 
-    fbs.reset();
-    try time3.gofmt(writer, "frac .999999999");
-    try std.testing.expectEqualStrings("frac .123456", fbs.getWritten());
+    writer.end = 0;
+    try time3.gofmt(&writer, "frac .999999999");
+    try std.testing.expectEqualStrings("frac .123456", writer.buffered());
 }
 
 test Instant {
@@ -2011,12 +2020,15 @@ test Instant {
     var env = try std.process.getEnvMap(alloc);
     defer env.deinit();
 
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+
     // Get an instant in time. The default gets "now" in UTC
-    const now = try instant(.{});
+    const now = try instant(.{ .io = io });
 
     // Load our local timezone. This needs an allocator. Optionally pass in a
     // *const std.process.EnvMap to support TZ and TZDIR environment variables
-    const local_tz = try zeit.local(alloc, &env);
+    const local_tz = try zeit.local(alloc, io, &env);
     defer local_tz.deinit();
 
     // Convert our instant to a new timezone
@@ -2041,17 +2053,19 @@ test Instant {
     //    .offset = -18000,
     // }
 
-    const anywriter = std.io.null_writer.any();
+    var buf: [256]u8 = undefined;
+    var anywriter = std.Io.Writer.fixed(&buf);
     // Format using strftime specifier. Format strings are not required to be comptime
-    try dt.strftime(anywriter, "%Y-%m-%d %H:%M:%S %Z");
+    try dt.strftime(&anywriter, "%Y-%m-%d %H:%M:%S %Z");
 
     // Or...golang magic date specifiers. Format strings are not required to be comptime
-    try dt.gofmt(anywriter, "2006-01-02 15:04:05 MST");
+    anywriter.end = 0;
+    try dt.gofmt(&anywriter, "2006-01-02 15:04:05 MST");
 
     // Load an arbitrary location using IANA location syntax. The location name
     // comes from an enum which will automatically map IANA location names to
     // Windows names, as needed. Pass an optional EnvMap to support TZDIR
-    const vienna = try zeit.loadTimeZone(alloc, .@"Europe/Vienna", &env);
+    const vienna = try zeit.loadTimeZone(alloc, io, .@"Europe/Vienna", &env);
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string
@@ -2071,11 +2085,13 @@ test Instant {
 test "github.com/rockorager/zeit/issues/15" {
     // https://github.com/rockorager/zeit/issues/15
     const timestamp = 1732838300;
-    const tz = try loadTimeZone(std.testing.allocator, .@"Europe/Berlin", null);
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    const tz = try loadTimeZone(std.testing.allocator, io, .@"Europe/Berlin", null);
     defer tz.deinit();
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
-    var list = std.ArrayList(u8).empty;
-    defer list.deinit(std.testing.allocator);
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     const time = inst.time();
 
     try std.testing.expectEqual(timestamp, time.instant().unixTimestamp());
@@ -2087,62 +2103,56 @@ test "github.com/rockorager/zeit/issues/15" {
     try std.testing.expectEqual(58, time.minute);
     try std.testing.expectEqual(20, time.second);
 
-    try time.strftime(list.writer(std.testing.allocator), "%a %A %u");
-    try std.testing.expectEqualStrings("Fri Friday 5", list.items);
+    try time.strftime(&writer, "%a %A %u");
+    try std.testing.expectEqualStrings("Fri Friday 5", writer.buffered());
 
-    list.clearRetainingCapacity();
-    try time.gofmt(list.writer(std.testing.allocator), "Mon Monday");
-    try std.testing.expectEqualStrings("Fri Friday", list.items);
+    writer.end = 0;
+    try time.gofmt(&writer, "Mon Monday");
+    try std.testing.expectEqualStrings("Fri Friday", writer.buffered());
 }
 
 test "github.com/rockorager/zeit/issues/27" {
     // April 23, 2025
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
-
-    var list: std.ArrayList(u8) = .empty;
-    defer list.deinit(std.testing.allocator);
-
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     const time = inst.time();
 
-    try time.gofmt(list.writer(std.testing.allocator), "02.01.2006");
-    try std.testing.expectEqualStrings("23.04.2025", list.items);
+    try time.gofmt(&writer, "02.01.2006");
+    try std.testing.expectEqualStrings("23.04.2025", writer.buffered());
 }
 
 test "github.com/rockorager/zeit/issues/24" {
     // April 23, 2025
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
-
-    var list: std.ArrayList(u8) = .empty;
-    defer list.deinit(std.testing.allocator);
-
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     const time = inst.time();
 
-    try time.gofmt(list.writer(std.testing.allocator), "3pm MST");
-    try std.testing.expectEqualStrings("1pm UTC", list.items);
-    list.clearRetainingCapacity();
+    try time.gofmt(&writer, "3pm MST");
+    try std.testing.expectEqualStrings("1pm UTC", writer.buffered());
 
-    try time.gofmt(list.writer(std.testing.allocator), "3p MST");
-    try std.testing.expectEqualStrings("1p UTC", list.items);
+    writer.end = 0;
+    try time.gofmt(&writer, "3p MST");
+    try std.testing.expectEqualStrings("1p UTC", writer.buffered());
 }
 
 test "github.com/rockorager/zeit/issues/26" {
     // April 23, 2025
     const timestamp = 1745414170;
     const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
-
-    var list: std.ArrayList(u8) = .empty;
-    defer list.deinit(std.testing.allocator);
-
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     const time = inst.time();
 
-    try time.gofmt(list.writer(std.testing.allocator), "02nd");
-    try std.testing.expectEqualStrings("23rd", list.items);
-    list.clearRetainingCapacity();
+    try time.gofmt(&writer, "02nd");
+    try std.testing.expectEqualStrings("23rd", writer.buffered());
 
-    try time.gofmt(list.writer(std.testing.allocator), "02ND");
-    try std.testing.expectEqualStrings("23RD", list.items);
+    writer.end = 0;
+    try time.gofmt(&writer, "02ND");
+    try std.testing.expectEqualStrings("23RD", writer.buffered());
 }
 
 test "bufPrintRFC3339Nano" {

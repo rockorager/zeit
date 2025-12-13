@@ -368,7 +368,7 @@ pub const Posix = struct {
     fn isDST(self: Posix, timestamp: Seconds) bool {
         const start = self.start orelse return false;
         const end = self.end orelse return false;
-        const days_from_epoch = @divFloor(timestamp, s_per_day);
+        const days_from_epoch: zeit.Days = @intCast(@divFloor(timestamp, s_per_day));
         const civil = zeit.civilFromDays(days_from_epoch);
         const civil_month = @intFromEnum(civil.month);
 

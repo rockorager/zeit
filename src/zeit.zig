@@ -8,7 +8,7 @@ const assert = std.debug.assert;
 pub const TimeZone = timezone.TimeZone;
 pub const Location = location.Location;
 
-pub const Days = i64;
+pub const Days = i32;
 pub const Nanoseconds = i128;
 pub const Milliseconds = i128;
 pub const Seconds = i64;
@@ -1760,7 +1760,7 @@ pub const Time = struct {
 /// Returns the number of days since the Unix epoch. timestamp should be the number of seconds from
 /// the Unix epoch
 pub fn daysSinceEpoch(timestamp: Seconds) Days {
-    return @divFloor(timestamp, s_per_day);
+    return @intCast(@divFloor(timestamp, s_per_day));
 }
 
 test "days since epoch" {
@@ -1813,7 +1813,7 @@ pub fn civilFromDays(days: Days) Date {
         ),
     ); // [0, 399]
     assert(yoe >= 0 and yoe < 400);
-    const y: i32 = @intCast(yoe + era * 400);
+    const y: i32 = @as(i32, @intCast(yoe)) + era * 400;
     const doy = doe - (365 * yoe + @divFloor(yoe, 4) - @divFloor(yoe, 100)); // [0, 365]
     const mp = @divFloor(5 * doy + 2, 153); // [0, 11]
     const d = doy - @divFloor(153 * mp + 2, 5) + 1; // [1, 31]

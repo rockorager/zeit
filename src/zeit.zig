@@ -2140,6 +2140,8 @@ test "bufPrintRFC3339Nano" {
     const cases = [_]Case{
         .{ .timestamp = "2023-01-15T23:45:51.123456789Z" },
         .{ .timestamp = "2023-01-15T23:45:51.000000789Z" },
+        .{ .timestamp = "2023-01-15T00:00:00.000000000Z" },
+        .{ .timestamp = "2023-01-15T00:00:00.001002003Z" },
     };
     for (cases) |case| {
         const iso = try instant(.{
@@ -2147,14 +2149,44 @@ test "bufPrintRFC3339Nano" {
                 .rfc3339 = case.timestamp,
             },
         });
-        const ns = iso.timestamp;
-        const zNs = try instant(.{
-            .source = .{
-                .unix_nano = ns,
-            },
-        });
-        var timeBuf: [30]u8 = undefined;
-        const time = try zNs.time().bufPrint(&timeBuf, .rfc3339Nano);
+        var timeBuf: [35]u8 = undefined;
+        const time = try iso.time().bufPrint(&timeBuf, .rfc3339Nano);
         try std.testing.expectEqualStrings(case.timestamp, time);
     }
+}
+
+test "bufPrintRFC3339Nano with offset" {
+    var timeBuf: [35]u8 = undefined;
+
+    // positive offset +05:30
+    const t1 = Time{
+        .year = 2023,
+        .month = .jan,
+        .day = 15,
+        .hour = 23,
+        .minute = 45,
+        .second = 51,
+        .millisecond = 123,
+        .microsecond = 456,
+        .nanosecond = 789,
+        .offset = 5 * 3600 + 30 * 60,
+    };
+    const s1 = try t1.bufPrint(&timeBuf, .rfc3339Nano);
+    try std.testing.expectEqualStrings("2023-01-15T23:45:51.123456789+05:30", s1);
+
+    // negative offset -08:00
+    const t2 = Time{
+        .year = 2023,
+        .month = .jan,
+        .day = 15,
+        .hour = 23,
+        .minute = 45,
+        .second = 51,
+        .millisecond = 123,
+        .microsecond = 456,
+        .nanosecond = 789,
+        .offset = -(8 * 3600),
+    };
+    const s2 = try t2.bufPrint(&timeBuf, .rfc3339Nano);
+    try std.testing.expectEqualStrings("2023-01-15T23:45:51.123456789-08:00", s2);
 }

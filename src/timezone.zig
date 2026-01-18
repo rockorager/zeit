@@ -859,7 +859,7 @@ pub const Windows = struct {
         // In the months between
         if (time.wMonth > start.wMonth and time.wMonth < end.wMonth) return true;
 
-        const days_from_epoch = @divFloor(timestamp, s_per_day);
+        const days_from_epoch: zeit.Days = @intCast(@divFloor(timestamp, s_per_day));
         // first_of_month is the weekday on the first of the month
         const first_of_month = zeit.weekdayFromDays(days_from_epoch - time.wDay + 1);
 

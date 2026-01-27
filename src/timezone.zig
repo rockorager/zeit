@@ -394,7 +394,7 @@ pub const Posix = struct {
                 if (civil_month > rule_month) break :blk timestamp - 1;
                 // we are in the same month
                 // first_of_month is the weekday on the first of the month
-                const first_of_month = zeit.weekdayFromDays(days_from_epoch - civil.day + 1);
+                const first_of_month = zeit.weekdayFromDays(@intCast(days_from_epoch - civil.day + 1));
                 // days is the first "rule day" of the month (ie the first
                 // Sunday of the month)
                 var days: u9 = first_of_month.daysUntil(rule.day) + 1;

@@ -861,7 +861,7 @@ pub const Windows = struct {
 
         const days_from_epoch = @divFloor(timestamp, s_per_day);
         // first_of_month is the weekday on the first of the month
-        const first_of_month = zeit.weekdayFromDays(days_from_epoch - time.wDay + 1);
+        const first_of_month = zeit.weekdayFromDays(@intCast(days_from_epoch - time.wDay + 1));
 
         // In the start transition month
         if (time.wMonth == start.wMonth) {

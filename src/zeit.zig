@@ -139,6 +139,7 @@ pub const Instant = struct {
     pub const Config = struct {
         source: Source = .now,
         timezone: *const TimeZone = &utc,
+        io: ?std.Io = null,
     };
 
     /// possible sources to create an Instant
@@ -273,9 +274,9 @@ pub const Instant = struct {
 };
 
 /// create a new Instant
-pub fn instant(io: std.Io, cfg: Instant.Config) !Instant {
+pub fn instant(cfg: Instant.Config) !Instant {
     const ts: Nanoseconds = switch (cfg.source) {
-        .now => (try std.Io.Clock.now(.real, io)).nanoseconds,
+        .now => (try std.Io.Clock.now(.real, cfg.io orelse return error.NeedIo)).toNanoseconds(),
         .unix_timestamp => |unix| @as(i128, unix) * ns_per_s,
         .unix_nano => |nano| nano,
         .time => |time| time.instant().timestamp,
@@ -303,7 +304,7 @@ pub fn instant(io: std.Io, cfg: Instant.Config) !Instant {
 }
 
 test "instant" {
-    const original = try instant(std.testing.io, .{});
+    const original = try instant(.{ .io = std.testing.io });
     const time = original.time();
     const round_trip = time.instant();
     try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
@@ -1900,7 +1901,7 @@ test {
 
 test "fmtStrftime" {
     var buf: [128]u8 = undefined;
-    const epoch = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = 0 } });
+    const epoch = try instant(.{ .source = .{ .unix_timestamp = 0 } });
     const time = epoch.time();
 
     var writer = std.Io.Writer.fixed(&buf);
@@ -2092,7 +2093,7 @@ test "Time.timeFmt" {
         .{time3.timeFmt(.gofmt, "frac .999999999")},
     );
 
-    const epoch = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = 0 } });
+    const epoch = try instant(.{ .source = .{ .unix_timestamp = 0 } });
     const time4 = epoch.time();
 
     var buf: [128]u8 = undefined;
@@ -2127,7 +2128,7 @@ test Instant {
     const alloc = std.testing.allocator;
 
     // Get an instant in time. The default gets "now" in UTC
-    const now = try instant(std.testing.io, .{});
+    const now = try instant(.{ .io = std.testing.io });
 
     // Load our local timezone. This needs an allocator. Optionally pass in an
     // EnvConfig to support TZ and TZDIR environment variables
@@ -2171,13 +2172,13 @@ test Instant {
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string
-    _ = try zeit.instant(std.testing.io, .{
+    _ = try zeit.instant(.{
         .source = .{
             .iso8601 = "2024-03-16T08:38:29.496-1200",
         },
     });
 
-    _ = try zeit.instant(std.testing.io, .{
+    _ = try zeit.instant(.{
         .source = .{
             .rfc3339 = "2024-03-16T08:38:29.496706064-1200",
         },
@@ -2189,7 +2190,7 @@ test "github.com/rockorager/zeit/issues/15" {
     const timestamp = 1732838300;
     const tz = try loadTimeZone(std.testing.allocator, std.testing.io, .@"Europe/Berlin", .{});
     defer tz.deinit();
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
     const time = inst.time();
 
     try std.testing.expectEqual(timestamp, time.instant().unixTimestamp());
@@ -2214,7 +2215,7 @@ test "github.com/rockorager/zeit/issues/15" {
 test "github.com/rockorager/zeit/issues/27" {
     // April 23, 2025
     const timestamp = 1745414170;
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp } });
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
     var aw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
@@ -2228,7 +2229,7 @@ test "github.com/rockorager/zeit/issues/27" {
 test "github.com/rockorager/zeit/issues/24" {
     // April 23, 2025
     const timestamp = 1745414170;
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp } });
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
     var aw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
@@ -2246,7 +2247,7 @@ test "github.com/rockorager/zeit/issues/24" {
 test "github.com/rockorager/zeit/issues/26" {
     // April 23, 2025
     const timestamp = 1745414170;
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp } });
+    const inst = try instant(.{ .source = .{ .unix_timestamp = timestamp } });
 
     var aw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
@@ -2272,7 +2273,7 @@ test "bufPrintRFC3339Nano" {
         .{ .timestamp = "2023-01-15T00:00:00.001002003Z" },
     };
     for (cases) |case| {
-        const iso = try instant(std.testing.io, .{
+        const iso = try instant(.{
             .source = .{
                 .rfc3339 = case.timestamp,
             },

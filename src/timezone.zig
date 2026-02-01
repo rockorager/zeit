@@ -795,7 +795,7 @@ pub const Windows = struct {
     /// 4. Determine if we are in DST or not
     /// 5. Return result
     pub fn adjust(self: Windows, timestamp: Seconds) AdjustedTime {
-        const instant = zeit.instant(undefined, .{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
+        const instant = zeit.instant(.{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
         const time = instant.time();
 
         const systemtime: windows.SYSTEMTIME = .{

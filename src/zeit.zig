@@ -13,6 +13,11 @@ pub const Nanoseconds = i128;
 pub const Milliseconds = i128;
 pub const Seconds = i64;
 
+pub const EnvConfig = struct {
+    tz: ?[]const u8 = null,
+    tzdir: ?[]const u8 = null,
+};
+
 const ns_per_us = std.time.ns_per_us;
 const ns_per_ms = std.time.ns_per_ms;
 const ns_per_s = std.time.ns_per_s;

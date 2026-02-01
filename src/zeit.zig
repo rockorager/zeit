@@ -1881,59 +1881,57 @@ test "fmtStrftime" {
     const epoch = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = 0 } });
     const time = epoch.time();
 
-    var fbs = std.io.fixedBufferStream(&buf);
-    const writer = fbs.writer();
+    var writer = std.Io.Writer.fixed(&buf);
 
-    try std.testing.expectError(error.InvalidFormat, time.strftime(writer, "no trailing lone percent %"));
+    try std.testing.expectError(error.InvalidFormat, time.strftime(&writer, "no trailing lone percent %"));
 
-    fbs.reset();
-    try time.strftime(writer, "%%");
-    try std.testing.expectEqualStrings("%", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%%");
+    try std.testing.expectEqualStrings("%", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%a %A %b %B %c %C");
-    try std.testing.expectEqualStrings("Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%a %A %b %B %c %C");
+    try std.testing.expectEqualStrings("Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%d %D %e %F %h");
-    try std.testing.expectEqualStrings("01 01/01/70  1 1970-01-01 Jan", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%d %D %e %F %h");
+    try std.testing.expectEqualStrings("01 01/01/70  1 1970-01-01 Jan", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%H %I %j %k %l %m %M");
-    try std.testing.expectEqualStrings("00 12 001 0 12 01 00", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%H %I %j %k %l %m %M");
+    try std.testing.expectEqualStrings("00 12 001 0 12 01 00", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%p %P %r %R %s %S");
-    try std.testing.expectEqualStrings("AM am 12:00:00 AM 00:00 0 00", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%p %P %r %R %s %S");
+    try std.testing.expectEqualStrings("AM am 12:00:00 AM 00:00 0 00", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%T %u");
-    try std.testing.expectEqualStrings("00:00:00 4", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%T %u");
+    try std.testing.expectEqualStrings("00:00:00 4", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%U");
-    try std.testing.expectEqualStrings("00", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%U");
+    try std.testing.expectEqualStrings("00", writer.buffered());
 
-    fbs.reset();
+    writer.end = 0;
     const d2 = (try time.instant().add(.{ .days = 3 })).time();
-    try d2.strftime(writer, "%U");
-    try std.testing.expectEqualStrings("01", fbs.getWritten());
+    try d2.strftime(&writer, "%U");
+    try std.testing.expectEqualStrings("01", writer.buffered());
 
-    fbs.reset();
-    try time.strftime(writer, "%w %W %x %X %y %Y %z %Z");
-    try std.testing.expectEqualStrings("4 00 01/01/70 00:00:00 70 1970 +0000 UTC", fbs.getWritten());
+    writer.end = 0;
+    try time.strftime(&writer, "%w %W %x %X %y %Y %z %Z");
+    try std.testing.expectEqualStrings("4 00 01/01/70 00:00:00 70 1970 +0000 UTC", writer.buffered());
 
-    fbs.reset();
+    writer.end = 0;
     var d3 = time;
     d3.offset = -3600;
-    try d3.strftime(writer, "%z");
-    try std.testing.expectEqualStrings("-0100", fbs.getWritten());
+    try d3.strftime(&writer, "%z");
+    try std.testing.expectEqualStrings("-0100", writer.buffered());
 }
 
 test "gofmt" {
     var buf: [128]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&buf);
-    const writer = fbs.writer();
+    var writer = std.Io.Writer.fixed(&buf);
 
     const time: Time = .{
         .year = 1970,
@@ -1942,17 +1940,17 @@ test "gofmt" {
         .designation = "UTC",
     };
 
-    fbs.reset();
-    try time.gofmt(writer, "Jan January J 01 02 03 04 05 06 002 Jan");
-    try std.testing.expectEqualStrings("Feb February J 02 03 12 00 00 70 034 Feb", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "Jan January J 01 02 03 04 05 06 002 Jan");
+    try std.testing.expectEqualStrings("Feb February J 02 03 12 00 00 70 034 Feb", writer.buffered());
 
-    fbs.reset();
-    try time.gofmt(writer, "Mon Monday MST M 1 15 2 2006 _2 __2 Mon");
-    try std.testing.expectEqualStrings("Tue Tuesday UTC M 2 00 3 1970  3  34 Tue", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "Mon Monday MST M 1 15 2 2006 _2 __2 Mon");
+    try std.testing.expectEqualStrings("Tue Tuesday UTC M 2 00 3 1970  3  34 Tue", writer.buffered());
 
-    fbs.reset();
-    try time.gofmt(writer, "3 4 5");
-    try std.testing.expectEqualStrings("12 0 0", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "3 4 5");
+    try std.testing.expectEqualStrings("12 0 0", writer.buffered());
 
     const time2: Time = .{
         .offset = 3661, // 1 hour, 1 minute, 1 second
@@ -1961,37 +1959,37 @@ test "gofmt" {
         .nanosecond = 789,
     };
 
-    fbs.reset();
-    try time2.gofmt(writer, "-070000 -07:00:00 -0700 -07:00 -07 -00");
-    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 -00", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "-070000 -07:00:00 -0700 -07:00 -07 -00");
+    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 -00", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
-    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 Z00", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
+    try std.testing.expectEqualStrings("+010101 +01:01:01 +0101 +01:01 +01 Z00", writer.buffered());
 
-    fbs.reset();
-    try time.gofmt(writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
-    try std.testing.expectEqualStrings("Z Z Z Z Z Z00", fbs.getWritten());
+    writer.end = 0;
+    try time.gofmt(&writer, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00");
+    try std.testing.expectEqualStrings("Z Z Z Z Z Z00", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .");
-    try std.testing.expectEqualStrings("frac .", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .");
+    try std.testing.expectEqualStrings("frac .", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .000000000");
-    try std.testing.expectEqualStrings("frac .123456789", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .000000000");
+    try std.testing.expectEqualStrings("frac .123456789", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .999999999");
-    try std.testing.expectEqualStrings("frac .123456789", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .999999999");
+    try std.testing.expectEqualStrings("frac .123456789", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .000000000000");
-    try std.testing.expectEqualStrings("frac .123456789000", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .000000000000");
+    try std.testing.expectEqualStrings("frac .123456789000", writer.buffered());
 
-    fbs.reset();
-    try time2.gofmt(writer, "frac .0000000");
-    try std.testing.expectEqualStrings("frac .1234567", fbs.getWritten());
+    writer.end = 0;
+    try time2.gofmt(&writer, "frac .0000000");
+    try std.testing.expectEqualStrings("frac .1234567", writer.buffered());
 
     const time3: Time = .{
         .offset = 3661, // 1 hour, 1 minute, 1 second
@@ -1999,9 +1997,9 @@ test "gofmt" {
         .microsecond = 456,
     };
 
-    fbs.reset();
-    try time3.gofmt(writer, "frac .999999999");
-    try std.testing.expectEqualStrings("frac .123456", fbs.getWritten());
+    writer.end = 0;
+    try time3.gofmt(&writer, "frac .999999999");
+    try std.testing.expectEqualStrings("frac .123456", writer.buffered());
 }
 
 test Instant {

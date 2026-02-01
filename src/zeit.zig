@@ -1256,8 +1256,30 @@ pub const Time = struct {
         }
     }
 
+    pub const FmtKind = enum { gofmt, strftime };
+    pub fn timeFmt(self: Time, kind: FmtKind, fmt_str: []const u8) TimeFmt {
+        return .{
+            .time = self,
+            .kind = kind,
+            .str = fmt_str,
+        };
+    }
+
+    const TimeFmt = struct {
+        time: Time,
+        kind: FmtKind,
+        str: []const u8,
+
+        pub fn format(self: TimeFmt, writer: *std.Io.Writer) !void {
+            switch (self.kind) {
+                .gofmt => self.time.gofmt(writer, self.str) catch return error.WriteFailed,
+                .strftime => self.time.strftime(writer, self.str) catch return error.WriteFailed,
+            }
+        }
+    };
+
     /// Format time using strftime(3) specified, eg %Y-%m-%dT%H:%M:%S
-    pub fn strftime(self: Time, writer: anytype, fmt: []const u8) !void {
+    pub fn strftime(self: Time, writer: *std.Io.Writer, fmt: []const u8) !void {
         const inst = self.instant();
         var i: usize = 0;
         while (i < fmt.len) {
@@ -1425,7 +1447,7 @@ pub const Time = struct {
     }
 
     /// Format using golang magic date format.
-    pub fn gofmt(self: Time, writer: anytype, fmt: []const u8) !void {
+    pub fn gofmt(self: Time, writer: *std.Io.Writer, fmt: []const u8) !void {
         var i: usize = 0;
         while (i < fmt.len) : (i += 1) {
             const b = fmt[i];
@@ -2002,6 +2024,103 @@ test "gofmt" {
     try std.testing.expectEqualStrings("frac .123456", writer.buffered());
 }
 
+test "Time.timeFmt" {
+    const time: Time = .{
+        .year = 1970,
+        .month = .feb,
+        .day = 3,
+        .designation = "UTC",
+    };
+    try std.testing.expectFmt(
+        "Feb February J 02 03 12 00 00 70 034 Feb",
+        "{f}",
+        .{time.timeFmt(.gofmt, "Jan January J 01 02 03 04 05 06 002 Jan")},
+    );
+
+    try std.testing.expectFmt(
+        "Tue Tuesday UTC M 2 00 3 1970  3  34 Tue",
+        "{f}",
+        .{time.timeFmt(.gofmt, "Mon Monday MST M 1 15 2 2006 _2 __2 Mon")},
+    );
+
+    try std.testing.expectFmt(
+        "12 0 0",
+        "{f}",
+        .{time.timeFmt(.gofmt, "3 4 5")},
+    );
+
+    const time2: Time = .{
+        .offset = 3661, // 1 hour, 1 minute, 1 second
+        .millisecond = 123,
+        .microsecond = 456,
+        .nanosecond = 789,
+    };
+
+    try std.testing.expectFmt(
+        "+010101 +01:01:01 +0101 +01:01 +01 -00",
+        "{f}",
+        .{time2.timeFmt(.gofmt, "-070000 -07:00:00 -0700 -07:00 -07 -00")},
+    );
+
+    try std.testing.expectFmt(
+        "+010101 +01:01:01 +0101 +01:01 +01 Z00",
+        "{f}",
+        .{time2.timeFmt(.gofmt, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00")},
+    );
+
+    try std.testing.expectFmt(
+        "Z Z Z Z Z Z00",
+        "{f}",
+        .{time.timeFmt(.gofmt, "Z070000 Z07:00:00 Z0700 Z07:00 Z07 Z00")},
+    );
+
+    try std.testing.expectFmt(
+        "frac .",
+        "{f}",
+        .{time2.timeFmt(.gofmt, "frac .")},
+    );
+
+    const time3: Time = .{
+        .offset = 3661, // 1 hour, 1 minute, 1 second
+        .millisecond = 123,
+        .microsecond = 456,
+    };
+
+    try std.testing.expectFmt(
+        "frac .123456",
+        "{f}",
+        .{time3.timeFmt(.gofmt, "frac .999999999")},
+    );
+
+    const epoch = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = 0 } });
+    const time4 = epoch.time();
+
+    var buf: [128]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
+    try std.testing.expectError(error.WriteFailed, writer.print(
+        "{f}",
+        .{time4.timeFmt(.strftime, "no trailing lone percent %")},
+    ));
+
+    try std.testing.expectFmt(
+        "%",
+        "{f}",
+        .{time4.timeFmt(.strftime, "%%")},
+    );
+
+    try std.testing.expectFmt(
+        "Thu Thursday Jan January Thu Jan  1 00:00:00 1970 19",
+        "{f}",
+        .{time4.timeFmt(.strftime, "%a %A %b %B %c %C")},
+    );
+
+    try std.testing.expectFmt(
+        "01 01/01/70  1 1970-01-01 Jan",
+        "{f}",
+        .{time4.timeFmt(.strftime, "%d %D %e %F %h")},
+    );
+}
+
 test Instant {
     const zeit = @This();
 
@@ -2118,8 +2237,8 @@ test "github.com/rockorager/zeit/issues/24" {
 
     try time.gofmt(&aw.writer, "3pm MST");
     try std.testing.expectEqualStrings("1pm UTC", aw.writer.buffered());
-    aw.writer.end = 0;
 
+    aw.writer.end = 0;
     try time.gofmt(&aw.writer, "3p MST");
     try std.testing.expectEqualStrings("1p UTC", aw.writer.buffered());
 }

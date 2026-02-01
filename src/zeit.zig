@@ -35,23 +35,21 @@ pub const utc: TimeZone = .{ .fixed = .{
     .is_dst = false,
 } };
 
-pub fn local(alloc: std.mem.Allocator, maybe_env: ?*const std.process.EnvMap) !TimeZone {
+pub fn local(alloc: std.mem.Allocator, io: std.Io, env: EnvConfig) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
             const win = try timezone.Windows.local(alloc);
             return .{ .windows = win };
         },
         else => {
-            if (maybe_env) |env| {
-                if (env.get("TZ")) |tz| {
-                    return localFromEnv(alloc, tz, env);
-                }
+            if (env.tz) |tz| {
+                return localFromEnv(alloc, io, tz, env);
             }
 
             const f = try std.fs.cwd().openFile("/etc/localtime", .{});
             defer f.close();
             var io_buffer: [2048]u8 = undefined;
-            var reader = f.reader(&io_buffer);
+            var reader = f.reader(io, &io_buffer);
             return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
         },
     }

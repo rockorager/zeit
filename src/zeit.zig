@@ -46,8 +46,8 @@ pub fn local(alloc: std.mem.Allocator, io: std.Io, env: EnvConfig) !TimeZone {
                 return localFromEnv(alloc, io, tz, env);
             }
 
-            const f = try std.fs.cwd().openFile("/etc/localtime", .{});
-            defer f.close();
+            const f = try std.Io.Dir.cwd().openFile(io, "/etc/localtime", .{});
+            defer f.close(io);
             var io_buffer: [2048]u8 = undefined;
             var reader = f.reader(io, &io_buffer);
             return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
@@ -73,8 +73,8 @@ fn localFromEnv(
 
     assert(tz.len > 1); // TZ not long enough
     if (tz[1] == '/') {
-        const f = try std.fs.cwd().openFile(tz[1..], .{});
-        defer f.close();
+        const f = try std.Io.Dir.cwd().openFile(io, tz[1..], .{});
+        defer f.close(io);
         var io_buffer: [1024]u8 = undefined;
         var reader = f.reader(io, &io_buffer);
         return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
@@ -100,10 +100,10 @@ pub fn loadTimeZone(
         else => {},
     }
 
-    var dir: std.fs.Dir = blk: {
+    var dir: std.Io.Dir = blk: {
         // If we have an env and a TZDIR, use that
         if (env.tzdir) |tzdir| {
-            const d = try std.fs.openDirAbsolute(tzdir, .{});
+            const d = try std.Io.Dir.cwd().openDir(io, tzdir, .{});
             break :blk d;
         }
         // Otherwise check well-known locations
@@ -115,14 +115,14 @@ pub fn loadTimeZone(
             "/etc/zoneinfo/",
         };
         for (zone_dirs) |zone_dir| {
-            const d = std.fs.openDirAbsolute(zone_dir, .{}) catch continue;
+            const d = std.Io.Dir.cwd().openDir(io, zone_dir, .{}) catch continue;
             break :blk d;
         } else return error.FileNotFound;
     };
 
-    defer dir.close();
-    const f = try dir.openFile(loc.asText(), .{});
-    defer f.close();
+    defer dir.close(io);
+    const f = try dir.openFile(io, loc.asText(), .{});
+    defer f.close(io);
     var io_buffer: [2048]u8 = undefined;
     var reader = f.reader(io, &io_buffer);
     return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };

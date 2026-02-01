@@ -62,8 +62,9 @@ pub fn local(alloc: std.mem.Allocator, io: std.Io, env: EnvConfig) !TimeZone {
 // 3. A relative path, prefixed with ':'
 fn localFromEnv(
     alloc: std.mem.Allocator,
+    io: std.Io,
     tz: []const u8,
-    env: *const std.process.EnvMap,
+    env: EnvConfig,
 ) !TimeZone {
     assert(tz.len != 0); // TZ is empty string
 
@@ -75,20 +76,21 @@ fn localFromEnv(
         const f = try std.fs.cwd().openFile(tz[1..], .{});
         defer f.close();
         var io_buffer: [1024]u8 = undefined;
-        var reader = f.reader(&io_buffer);
+        var reader = f.reader(io, &io_buffer);
         return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
     }
 
     if (std.meta.stringToEnum(Location, tz[1..])) |loc|
-        return loadTimeZone(alloc, loc, env)
+        return loadTimeZone(alloc, io, loc, env)
     else
         return error.UnknownLocation;
 }
 
 pub fn loadTimeZone(
     alloc: std.mem.Allocator,
+    io: std.Io,
     loc: Location,
-    maybe_env: ?*const std.process.EnvMap,
+    env: EnvConfig,
 ) !TimeZone {
     switch (builtin.os.tag) {
         .windows => {
@@ -100,11 +102,9 @@ pub fn loadTimeZone(
 
     var dir: std.fs.Dir = blk: {
         // If we have an env and a TZDIR, use that
-        if (maybe_env) |env| {
-            if (env.get("TZDIR")) |tzdir| {
-                const dir = try std.fs.openDirAbsolute(tzdir, .{});
-                break :blk dir;
-            }
+        if (env.tzdir) |tzdir| {
+            const d = try std.fs.openDirAbsolute(tzdir, .{});
+            break :blk d;
         }
         // Otherwise check well-known locations
         const zone_dirs = [_][]const u8{
@@ -115,8 +115,8 @@ pub fn loadTimeZone(
             "/etc/zoneinfo/",
         };
         for (zone_dirs) |zone_dir| {
-            const dir = std.fs.openDirAbsolute(zone_dir, .{}) catch continue;
-            break :blk dir;
+            const d = std.fs.openDirAbsolute(zone_dir, .{}) catch continue;
+            break :blk d;
         } else return error.FileNotFound;
     };
 
@@ -124,7 +124,7 @@ pub fn loadTimeZone(
     const f = try dir.openFile(loc.asText(), .{});
     defer f.close();
     var io_buffer: [2048]u8 = undefined;
-    var reader = f.reader(&io_buffer);
+    var reader = f.reader(io, &io_buffer);
     return .{ .tzinfo = try timezone.TZInfo.parse(alloc, &reader.interface) };
 }
 

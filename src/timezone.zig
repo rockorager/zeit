@@ -117,7 +117,7 @@ pub const Posix = struct {
                     const julian = try std.fmt.parseInt(u9, str[1..], 10);
                     return .{ .julian = .{ .day = julian } };
                 },
-                '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => |_| {
+                '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => {
                     const julian = try std.fmt.parseInt(u9, str, 10);
                     return .{ .julian_leap = .{ .day = julian } };
                 },
@@ -795,7 +795,7 @@ pub const Windows = struct {
     /// 4. Determine if we are in DST or not
     /// 5. Return result
     pub fn adjust(self: Windows, timestamp: Seconds) AdjustedTime {
-        const instant = zeit.instant(.{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
+        const instant = zeit.instant(undefined, .{ .source = .{ .unix_timestamp = timestamp } }) catch unreachable;
         const time = instant.time();
 
         const systemtime: windows.SYSTEMTIME = .{
@@ -861,7 +861,7 @@ pub const Windows = struct {
 
         const days_from_epoch = @divFloor(timestamp, s_per_day);
         // first_of_month is the weekday on the first of the month
-        const first_of_month = zeit.weekdayFromDays(days_from_epoch - time.wDay + 1);
+        const first_of_month = zeit.weekdayFromDays(@intCast(days_from_epoch - time.wDay + 1));
 
         // In the start transition month
         if (time.wMonth == start.wMonth) {

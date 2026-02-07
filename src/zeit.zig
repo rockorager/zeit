@@ -275,7 +275,7 @@ pub const Instant = struct {
 /// create a new Instant
 pub fn instant(io: std.Io, cfg: Instant.Config) !Instant {
     const ts: Nanoseconds = switch (cfg.source) {
-        .now => (try std.Io.Clock.now(.real, io)).nanoseconds,
+        .now => std.Io.Clock.now(.real, io).nanoseconds,
         .unix_timestamp => |unix| @as(i128, unix) * ns_per_s,
         .unix_nano => |nano| nano,
         .time => |time| time.instant().timestamp,

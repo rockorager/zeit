@@ -9,4 +9,5 @@
         "build.zig.zon",
         "src",
     },
+    .minimum_zig_version = "0.16.0-dev.2533+355c62600",
 }

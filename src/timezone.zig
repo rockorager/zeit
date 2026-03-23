@@ -859,18 +859,20 @@ pub const Windows = struct {
         // In the months between
         if (time.wMonth > start.wMonth and time.wMonth < end.wMonth) return true;
 
-        const days_from_epoch = @divFloor(timestamp, s_per_day);
+        const days_from_epoch: zeit.Days = @intCast(@divFloor(timestamp, s_per_day));
         // first_of_month is the weekday on the first of the month
-        const first_of_month = zeit.weekdayFromDays(days_from_epoch - time.wDay + 1);
+        const first_of_month = zeit.weekdayFromDays(
+            days_from_epoch - @as(zeit.Days, @intCast(time.wDay)) + 1,
+        );
 
         // In the start transition month
         if (time.wMonth == start.wMonth) {
             // days is the first "rule day" of the month (ie the first
             // Sunday of the month)
-            var days: u9 = first_of_month.daysUntil(@enumFromInt(start.wDayOfWeek));
+            var days: u9 = first_of_month.daysUntil(@enumFromInt(start.wDayOfWeek)) + 1;
             var i: usize = 1;
             while (i < start.wDay) : (i += 1) {
-                const month: zeit.Month = @enumFromInt(start.wDay);
+                const month: zeit.Month = @enumFromInt(start.wMonth);
                 if (days + 7 >= month.lastDay(time.wYear)) break;
                 days += 7;
             }
@@ -886,10 +888,10 @@ pub const Windows = struct {
         if (time.wMonth == end.wMonth) {
             // days is the first "rule day" of the month (ie the first
             // Sunday of the month)
-            var days: u9 = first_of_month.daysUntil(@enumFromInt(end.wDayOfWeek));
+            var days: u9 = first_of_month.daysUntil(@enumFromInt(end.wDayOfWeek)) + 1;
             var i: usize = 1;
             while (i < end.wDay) : (i += 1) {
-                const month: zeit.Month = @enumFromInt(end.wDay);
+                const month: zeit.Month = @enumFromInt(end.wMonth);
                 if (days + 7 >= month.lastDay(time.wYear)) break;
                 days += 7;
             }

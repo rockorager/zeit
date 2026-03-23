@@ -1643,8 +1643,9 @@ pub const Time = struct {
                                 .{ self.millisecond, self.microsecond, self.nanosecond },
                             );
                             try writer.writeAll(str[0..@min(n, str.len)]);
-                            if (n > str.len)
-                                try writer.writeByteNTimes('0', n - str.len);
+                            if (n > str.len) {
+                                for (0..n - str.len) |_| try writer.writeByte('0');
+                            }
                         },
                         '9' => {
                             var n: usize = 0;

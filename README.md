@@ -28,6 +28,7 @@ pub fn main() void {
     // Load our local timezone. This needs an allocator. Optionally pass in a
     // *const std.process.EnvMap to support TZ and TZDIR environment variables
     const local = try zeit.local(alloc, &env);
+	defer local.deinit();
 
     // Convert our instant to a new timezone
     const now_local = now.in(&local);

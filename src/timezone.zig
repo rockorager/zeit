@@ -810,13 +810,13 @@ pub const Windows = struct {
         };
 
         var localtime: windows.SYSTEMTIME = undefined;
-        if (windows.SystemTimeToTzSpecificLocalTimeEx(&self.zoneinfo, &systemtime, &localtime) == 0) {
+        if (windows.SystemTimeToTzSpecificLocalTimeEx(&self.zoneinfo, &systemtime, &localtime) == .FALSE) {
             const err = std.os.windows.GetLastError();
             std.log.err("{}", .{err});
             @panic("TODO");
         }
         var tzi: windows.TIME_ZONE_INFORMATION = undefined;
-        if (windows.GetTimeZoneInformationForYear(localtime.wYear, &self.zoneinfo, &tzi) == 0) {
+        if (windows.GetTimeZoneInformationForYear(localtime.wYear, &self.zoneinfo, &tzi) == .FALSE) {
             const err = std.os.windows.GetLastError();
             std.log.err("{}", .{err});
             @panic("TODO");

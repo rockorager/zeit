@@ -5,8 +5,12 @@
 //! Source data available at https://github.com/unicode-org/cldr/blob/main/common/supplemental/windowsZones.xml
 const std = @import("std");
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    //const allocator = std.heap.page_allocator;
     const data = @embedFile("windowsZones.xml");
 
     var zones: std.ArrayList(MapZone) = .empty;
@@ -16,7 +20,7 @@ pub fn main() !void {
         const eol = std.mem.indexOfScalarPos(u8, data, read_idx, '\n') orelse data.len;
         defer read_idx = eol + 1;
         const input_line = data[read_idx..eol];
-        const line = std.mem.trimRight(u8, std.mem.trim(u8, input_line, " \t<>"), "/");
+        const line = std.mem.trimEnd(u8, std.mem.trim(u8, input_line, " \t<>"), "/");
         if (!std.mem.startsWith(u8, line, "mapZone")) continue;
         var idx: usize = 0;
         const windows = blk: {
@@ -58,11 +62,12 @@ pub fn main() !void {
 
     std.mem.sort(MapZone, zones.items, {}, lessThan);
 
-    const out = try std.fs.cwd().createFile("src/location.zig", .{});
-    defer out.close();
+    var out = try std.Io.Dir.createFile(.cwd(), io, "src/location.zig", .{}); //.cwd().createFile("src/location.zig", .{});
+    defer out.close(io);
 
     var output_buffer: [2048]u8 = undefined;
-    var writer = out.writer(&output_buffer);
+    var writer = out.writer(io, &output_buffer);
+
     try writeFile(zones.items, &writer.interface);
 }
 
@@ -76,7 +81,7 @@ const MapZone = struct {
     posix: []const u8,
 };
 
-fn writeFile(items: []const MapZone, writer: *std.io.Writer) !void {
+fn writeFile(items: []const MapZone, writer: *std.Io.Writer) !void {
     try writer.writeAll(
         \\//!This file is generated. Do not edit directly! Run `zig build generate` to update after obtaining
         \\//!the latest dataset.

@@ -136,15 +136,10 @@ pub const Instant = struct {
     /// every instant occurs in a timezone. This is the timezone
     timezone: *const TimeZone,
 
-    pub const Config = struct {
-        source: Source = .now,
-        timezone: *const TimeZone = &utc,
-    };
-
     /// possible sources to create an Instant
     pub const Source = union(enum) {
-        /// the current system time
-        now,
+        /// current wall clock determined using std.Io
+        now: std.Io,
 
         /// a specific unix timestamp (in seconds)
         unix_timestamp: Seconds,
@@ -154,7 +149,10 @@ pub const Instant = struct {
 
         /// create an Instant from a calendar date and time
         time: Time,
+    };
 
+    /// text time format for parsing
+    const TextFormat = enum {
         /// parse a datetime from an ISO8601 string
         /// Supports most ISO8601 formats, _except_:
         /// - Week numbers (ie YYYY-Www)
@@ -172,7 +170,7 @@ pub const Instant = struct {
         /// YYYY-MM-DDTHH:MM:SSZ
         /// YYYY-MM-DDTHH:MM:SS+hh:mm
         /// YYYYMMDDTHHMMSSZ
-        iso8601: []const u8,
+        iso8601,
 
         /// Parse a datetime from an RFC3339 string. RFC3339 is similar to
         /// ISO8601 but is more strict, and allows for arbitrary fractional
@@ -180,16 +178,16 @@ pub const Instant = struct {
         /// provided for clarity
         /// has nanoseconds precision (9 digits after period), same as rfc3339Nano could be
         /// Format: YYYY-MM-DDTHH:MM:SS.s{,9}+hh:mm
-        rfc3339: []const u8,
+        rfc3339,
 
         /// Parse a datetime from an RFC5322 date-time spec
-        rfc5322: []const u8,
+        rfc5322,
 
         /// Parse a datetime from an RFC2822 date-time spec. This is an alias for RFC5322
-        rfc2822: []const u8,
+        rfc2822,
 
         /// Parse a datetime from an RFC1123 date-time spec
-        rfc1123: []const u8,
+        rfc1123,
     };
 
     /// convert this Instant to another timezone
@@ -272,41 +270,73 @@ pub const Instant = struct {
     }
 };
 
-/// create a new Instant
-pub fn instant(io: std.Io, cfg: Instant.Config) !Instant {
-    const ts: Nanoseconds = switch (cfg.source) {
-        .now => std.Io.Clock.now(.real, io).nanoseconds,
+/// Creates a new Instant from time value specified by *source*.
+///
+/// See also .instantFromText().
+pub fn instant(source: Instant.Source, tz: *const TimeZone) Instant {
+    const ts: Nanoseconds = switch (source) {
+        .now => |io| std.Io.Clock.now(.real, io).nanoseconds,
         .unix_timestamp => |unix| @as(i128, unix) * ns_per_s,
         .unix_nano => |nano| nano,
         .time => |time| time.instant().timestamp,
+    };
+    return .{
+        .timestamp = ts,
+        .timezone = tz,
+    };
+}
+
+test "instant" {
+    const original = instant(.{ .time = .{} }, &utc);
+    const time = original.time();
+    const round_trip = time.instant();
+    try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
+}
+
+/// Creates a new Instant by parsing text.
+///
+/// See also .instant()
+pub fn instantFromText(format: Instant.TextFormat, text: []const u8, tz: *const TimeZone) !Instant {
+    const ts: Nanoseconds = switch (format) {
         .iso8601,
         .rfc3339,
-        => |iso| blk: {
-            const t = try Time.fromISO8601(iso);
+        => blk: {
+            const t = try Time.fromISO8601(text);
             break :blk t.instant().timestamp;
         },
         .rfc2822,
         .rfc5322,
-        => |eml| blk: {
-            const t = try Time.fromRFC5322(eml);
+        => blk: {
+            const t = try Time.fromRFC5322(text);
             break :blk t.instant().timestamp;
         },
-        .rfc1123 => |http_date| blk: {
-            const t = try Time.fromRFC1123(http_date);
+        .rfc1123 => blk: {
+            const t = try Time.fromRFC1123(text);
             break :blk t.instant().timestamp;
         },
     };
     return .{
         .timestamp = ts,
-        .timezone = cfg.timezone,
+        .timezone = tz,
     };
 }
 
-test "instant" {
-    const original = try instant(std.testing.io, .{});
-    const time = original.time();
-    const round_trip = time.instant();
-    try std.testing.expectEqual(original.timestamp, round_trip.timestamp);
+test "instantFromText" {
+    const original_text = "2001-09-09T03:46:40+0200";
+    const original_tz: TimeZone = .{ .fixed = .{
+        .name = "foo",
+        .offset = 2 * std.time.s_per_hour,
+        .is_dst = true,
+    } };
+    // ^ not a real TZ but close enough (only offset matters here)
+    const round_trip_instant = try instantFromText(.iso8601, original_text, &original_tz);
+    const round_trip_text = try std.fmt.allocPrint(
+        std.testing.allocator,
+        "{f}",
+        .{round_trip_instant.time().timeFmt(.strftime, "%Y-%m-%dT%H:%M:%S%z")},
+    );
+    defer std.testing.allocator.free(round_trip_text);
+    try std.testing.expectEqualStrings(original_text, round_trip_text);
 }
 
 pub const Month = enum(u4) {
@@ -1900,7 +1930,7 @@ test {
 
 test "fmtStrftime" {
     var buf: [128]u8 = undefined;
-    const epoch = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = 0 } });
+    const epoch = instant(.{ .unix_timestamp = 0 }, &utc);
     const time = epoch.time();
 
     var writer = std.Io.Writer.fixed(&buf);
@@ -2092,7 +2122,7 @@ test "Time.timeFmt" {
         .{time3.timeFmt(.gofmt, "frac .999999999")},
     );
 
-    const epoch = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = 0 } });
+    const epoch = instant(.{ .unix_timestamp = 0 }, &utc);
     const time4 = epoch.time();
 
     var buf: [128]u8 = undefined;
@@ -2127,7 +2157,7 @@ test Instant {
     const alloc = std.testing.allocator;
 
     // Get an instant in time. The default gets "now" in UTC
-    const now = try instant(std.testing.io, .{});
+    const now = instant(.{ .now = std.testing.io }, &utc);
 
     // Load our local timezone. This needs an allocator. Optionally pass in an
     // EnvConfig to support TZ and TZDIR environment variables
@@ -2171,17 +2201,17 @@ test Instant {
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string
-    _ = try zeit.instant(std.testing.io, .{
-        .source = .{
-            .iso8601 = "2024-03-16T08:38:29.496-1200",
-        },
-    });
+    _ = try zeit.instantFromText(
+        .iso8601,
+        "2024-03-16T08:38:29.496-1200",
+        &utc,
+    );
 
-    _ = try zeit.instant(std.testing.io, .{
-        .source = .{
-            .rfc3339 = "2024-03-16T08:38:29.496706064-1200",
-        },
-    });
+    _ = try zeit.instantFromText(
+        .rfc3339,
+        "2024-03-16T08:38:29.496706064-1200",
+        &utc,
+    );
 }
 
 test "github.com/rockorager/zeit/issues/15" {
@@ -2189,7 +2219,7 @@ test "github.com/rockorager/zeit/issues/15" {
     const timestamp = 1732838300;
     const tz = try loadTimeZone(std.testing.allocator, std.testing.io, .@"Europe/Berlin", .{});
     defer tz.deinit();
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp }, .timezone = &tz });
+    const inst = instant(.{ .unix_timestamp = timestamp }, &tz);
     const time = inst.time();
 
     try std.testing.expectEqual(timestamp, time.instant().unixTimestamp());
@@ -2214,7 +2244,7 @@ test "github.com/rockorager/zeit/issues/15" {
 test "github.com/rockorager/zeit/issues/27" {
     // April 23, 2025
     const timestamp = 1745414170;
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp } });
+    const inst = instant(.{ .unix_timestamp = timestamp }, &utc);
 
     var aw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
@@ -2228,7 +2258,7 @@ test "github.com/rockorager/zeit/issues/27" {
 test "github.com/rockorager/zeit/issues/24" {
     // April 23, 2025
     const timestamp = 1745414170;
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp } });
+    const inst = instant(.{ .unix_timestamp = timestamp }, &utc);
 
     var aw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
@@ -2246,7 +2276,7 @@ test "github.com/rockorager/zeit/issues/24" {
 test "github.com/rockorager/zeit/issues/26" {
     // April 23, 2025
     const timestamp = 1745414170;
-    const inst = try instant(std.testing.io, .{ .source = .{ .unix_timestamp = timestamp } });
+    const inst = instant(.{ .unix_timestamp = timestamp }, &utc);
 
     var aw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
@@ -2272,11 +2302,11 @@ test "bufPrintRFC3339Nano" {
         .{ .timestamp = "2023-01-15T00:00:00.001002003Z" },
     };
     for (cases) |case| {
-        const iso = try instant(std.testing.io, .{
-            .source = .{
-                .rfc3339 = case.timestamp,
-            },
-        });
+        const iso = try instantFromText(
+            .rfc3339,
+            case.timestamp,
+            &utc,
+        );
         var timeBuf: [35]u8 = undefined;
         const time = try iso.time().bufPrint(&timeBuf, .rfc3339Nano);
         try std.testing.expectEqualStrings(case.timestamp, time);

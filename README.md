@@ -23,8 +23,8 @@ pub fn main() !void {
     defer threaded.deinit();
     const io = threaded.io();
 
-    // Get an instant in time. The default gets "now" in UTC
-    const now = try zeit.instant(io, .{});
+    // Get a "now" instant in UTC.
+    const now = zeit.instant(.{.now = io}, &zeit.utc);
 
     // Load our local timezone. This needs an allocator. Optionally pass in a
     // zeit.EnvConfig to support TZ and TZDIR environment variables
@@ -73,16 +73,16 @@ pub fn main() !void {
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string
-    _ = try zeit.instant(io, .{
-        .source = .{
-            .iso8601 = "2024-03-16T08:38:29.496-1200",
-        },
+    _ = try zeit.instantFromText(
+        .iso8601,
+        "2024-03-16T08:38:29.496-1200",
+        &zeit.utc,
     });
 
-    _ = try zeit.instant(io, .{
-        .source = .{
-            .rfc3339 = "2024-03-16T08:38:29.496706064-1200",
-        },
+    _ = try zeit.instantFromText(
+        .rfc3339,
+        "2024-03-16T08:38:29.496706064-1200",
+        &zeit.utc,
     });
 }
 ```

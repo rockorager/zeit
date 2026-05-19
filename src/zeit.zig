@@ -152,7 +152,7 @@ pub const Instant = struct {
     };
 
     /// text time format for parsing
-    const TextFormat = enum {
+    pub const TextFormat = enum {
         /// parse a datetime from an ISO8601 string
         /// Supports most ISO8601 formats, _except_:
         /// - Week numbers (ie YYYY-Www)

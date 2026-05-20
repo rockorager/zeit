@@ -463,6 +463,115 @@ pub const Duration = struct {
 
         return ns;
     }
+
+    /// Create a duration based on a number (u64) of nanoseconds.
+    pub fn fromNanoseconds(input: u64) Duration {
+        var to_go = input;
+        var result: Duration = undefined;
+
+        result.days = @intCast(to_go / ns_per_day);
+        to_go -= result.days * ns_per_day;
+
+        result.hours = @intCast(to_go / ns_per_hour);
+        to_go -= result.hours * ns_per_hour;
+
+        result.minutes = @intCast(to_go / ns_per_min);
+        to_go -= result.minutes * ns_per_min;
+
+        result.seconds = @intCast(to_go / ns_per_s);
+        to_go -= result.seconds * ns_per_s;
+
+        result.milliseconds = @intCast(to_go / ns_per_ms);
+        to_go -= result.milliseconds * ns_per_ms;
+
+        result.microseconds = @intCast(to_go / ns_per_us);
+        to_go -= result.microseconds * ns_per_us;
+
+        result.nanoseconds = @intCast(to_go);
+
+        return result;
+    }
+
+    /// Normalize the duration by making sure each field respects
+    /// its natural maximum.
+    pub fn normalized(self: Duration) error{Overflow}!Duration {
+        var result = self;
+        const max_u32 = std.math.maxInt(u32);
+
+        if (result.nanoseconds >= 1000) {
+            const delta = result.nanoseconds / 1000;
+
+            // If the increment of microseconds would overflow we
+            // normalize the rest of the fields to make sure
+            // microseconds is small enough for the increment to work.
+
+            if (max_u32 - result.microseconds < delta) {
+                const temp = result.nanoseconds;
+                result.nanoseconds = 0;
+                result = try result.normalized();
+                result.nanoseconds = temp;
+            }
+            result.microseconds += delta;
+            result.nanoseconds %= 1000;
+        }
+
+        if (result.microseconds >= 1000) {
+            const delta = result.microseconds / 1000;
+            if (max_u32 - result.milliseconds < delta) {
+                const temp = result.microseconds;
+                result.microseconds = 0;
+                result = try result.normalized();
+                result.microseconds = temp;
+            }
+            result.milliseconds += delta;
+            result.microseconds %= 1000;
+        }
+
+        if (result.milliseconds >= 1000) {
+            const delta = result.milliseconds / 1000;
+            if (max_u32 - result.seconds < delta) {
+                const temp = result.milliseconds;
+                result.milliseconds = 0;
+                result = try result.normalized();
+                result.milliseconds = temp;
+            }
+            result.seconds += delta;
+            result.milliseconds %= 1000;
+        }
+
+        if (result.seconds >= 60) {
+            const delta = result.seconds / 60;
+            if (max_u32 - result.minutes < delta) {
+                const temp = result.seconds;
+                result.seconds = 0;
+                result = try result.normalized();
+                result.seconds = temp;
+            }
+            result.minutes += delta;
+            result.seconds %= 60;
+        }
+
+        if (result.minutes >= 60) {
+            const delta = result.minutes / 60;
+            if (max_u32 - result.hours < delta) {
+                const temp = result.minutes;
+                result.minutes = 0;
+                result = try result.normalized();
+                result.minutes = temp;
+            }
+            result.hours += delta;
+            result.minutes %= 60;
+        }
+
+        if (result.hours >= 24) {
+            const delta = result.hours / 24;
+            if (max_u32 - result.days < delta) return error.Overflow;
+            result.days += delta;
+            result.hours %= 24;
+        }
+
+        return result;
+    }
 };
 
 pub const Weekday = enum(u3) {
@@ -2347,4 +2456,96 @@ test "bufPrintRFC3339Nano with offset" {
     };
     const s2 = try t2.bufPrint(&timeBuf, .rfc3339Nano);
     try std.testing.expectEqualStrings("2023-01-15T23:45:51.123456789-08:00", s2);
+}
+
+test "Duration normalization" {
+    const src: Duration = .{ .nanoseconds = std.math.maxInt(u32) };
+    const dst = try src.normalized();
+
+    try std.testing.expectEqual(dst.days, 0);
+    try std.testing.expectEqual(dst.hours, 0);
+    try std.testing.expectEqual(dst.minutes, 0);
+    try std.testing.expectEqual(dst.seconds, 4);
+    try std.testing.expectEqual(dst.milliseconds, 294);
+    try std.testing.expectEqual(dst.microseconds, 967);
+    try std.testing.expectEqual(dst.nanoseconds, 295);
+
+    const src2: Duration = .{ .seconds = std.math.maxInt(u32) };
+    const dst2 = try src2.normalized();
+    try std.testing.expectEqual(dst2.days, 49710);
+    try std.testing.expectEqual(dst2.hours, 6);
+    try std.testing.expectEqual(dst2.minutes, 28);
+    try std.testing.expectEqual(dst2.seconds, 15);
+    try std.testing.expectEqual(dst2.milliseconds, 0);
+    try std.testing.expectEqual(dst2.microseconds, 0);
+    try std.testing.expectEqual(dst2.nanoseconds, 0);
+}
+
+test "Duration overflows" {
+    const max_u32 = std.math.maxInt(u32);
+
+    var src: Duration = .{ .nanoseconds = 1000, .microseconds = max_u32 };
+    var dst = try src.normalized();
+    try std.testing.expectEqual(dst.days, 0);
+    try std.testing.expectEqual(dst.hours, 1);
+    try std.testing.expectEqual(dst.minutes, 11);
+    try std.testing.expectEqual(dst.seconds, 34);
+    try std.testing.expectEqual(dst.milliseconds, 967);
+    try std.testing.expectEqual(dst.microseconds, 296);
+    try std.testing.expectEqual(dst.nanoseconds, 0);
+
+    src = .{ .microseconds = 1000, .milliseconds = max_u32 };
+    dst = try src.normalized();
+    try std.testing.expectEqual(dst.days, 49);
+    try std.testing.expectEqual(dst.hours, 17);
+    try std.testing.expectEqual(dst.minutes, 2);
+    try std.testing.expectEqual(dst.seconds, 47);
+    try std.testing.expectEqual(dst.milliseconds, 296);
+    try std.testing.expectEqual(dst.microseconds, 0);
+    try std.testing.expectEqual(dst.nanoseconds, 0);
+
+    src = .{ .milliseconds = 1000, .seconds = max_u32 };
+    dst = try src.normalized();
+    try std.testing.expectEqual(dst.days, 49_710);
+    try std.testing.expectEqual(dst.hours, 6);
+    try std.testing.expectEqual(dst.minutes, 28);
+    try std.testing.expectEqual(dst.seconds, 16);
+    try std.testing.expectEqual(dst.milliseconds, 0);
+    try std.testing.expectEqual(dst.microseconds, 0);
+    try std.testing.expectEqual(dst.nanoseconds, 0);
+
+    src = .{ .seconds = 60, .minutes = max_u32 };
+    dst = try src.normalized();
+    try std.testing.expectEqual(dst.days, 2_982_616);
+    try std.testing.expectEqual(dst.hours, 4);
+    try std.testing.expectEqual(dst.minutes, 16);
+    try std.testing.expectEqual(dst.seconds, 0);
+    try std.testing.expectEqual(dst.milliseconds, 0);
+    try std.testing.expectEqual(dst.microseconds, 0);
+    try std.testing.expectEqual(dst.nanoseconds, 0);
+
+    src = .{ .minutes = 60, .hours = max_u32 };
+    dst = try src.normalized();
+    try std.testing.expectEqual(dst.days, 178_956_970);
+    try std.testing.expectEqual(dst.hours, 16);
+    try std.testing.expectEqual(dst.minutes, 0);
+    try std.testing.expectEqual(dst.seconds, 0);
+    try std.testing.expectEqual(dst.milliseconds, 0);
+    try std.testing.expectEqual(dst.microseconds, 0);
+    try std.testing.expectEqual(dst.nanoseconds, 0);
+
+    src = .{ .hours = 24, .days = max_u32 };
+    try std.testing.expectError(error.Overflow, src.normalized());
+}
+
+test "Duration from nanoseconds" {
+    const dst = Duration.fromNanoseconds(std.math.maxInt(u64));
+
+    try std.testing.expectEqual(dst.days, 213_503);
+    try std.testing.expectEqual(dst.hours, 23);
+    try std.testing.expectEqual(dst.minutes, 34);
+    try std.testing.expectEqual(dst.seconds, 33);
+    try std.testing.expectEqual(dst.milliseconds, 709);
+    try std.testing.expectEqual(dst.microseconds, 551);
+    try std.testing.expectEqual(dst.nanoseconds, 615);
 }

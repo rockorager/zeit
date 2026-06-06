@@ -2,12 +2,21 @@
 
 A time library written in zig.
 
-## Install 
+## Install
+
+zeit's `main` branch currently tracks Zig 0.17-dev.
+
 ```
 zig fetch --save git+https://github.com/rockorager/zeit?ref=main
 ```
 
-Or install a [tag](https://github.com/rockorager/zeit/tags) instead of main.
+For the last Zig 0.16-compatible release, fetch `v0.9.0`:
+
+```
+zig fetch --save git+https://github.com/rockorager/zeit?ref=v0.9.0
+```
+
+Or install another [tag](https://github.com/rockorager/zeit/tags) instead of main.
 
 ## Usage
 

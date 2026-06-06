@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const fmt = b.addFmt(
-        .{ .paths = &.{"src/location.zig"} },
+        .{ .paths = b.pathList(&.{"src/location.zig"}) },
     );
     const gen_run = b.addRunArtifact(gen);
     fmt.step.dependOn(&gen_run.step);

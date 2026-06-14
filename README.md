@@ -47,7 +47,7 @@ pub fn main() !void {
     const dt = now_local.time();
 
     // Print it out
-    std.debug.print("{}", .{dt});
+    std.debug.print("{}\n", .{dt});
 
     // zeit.Time{
     //    .year = 2024,

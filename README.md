@@ -86,12 +86,12 @@ pub fn main() !void {
         .iso8601,
         "2024-03-16T08:38:29.496-1200",
         &zeit.utc,
-    });
+    );
 
     _ = try zeit.instantFromText(
         .rfc3339,
         "2024-03-16T08:38:29.496706064-1200",
         &zeit.utc,
-    });
+    );
 }
 ```

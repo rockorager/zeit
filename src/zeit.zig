@@ -43,6 +43,9 @@ pub fn local(alloc: std.mem.Allocator, io: std.Io, env: EnvConfig) !TimeZone {
         },
         else => {
             if (env.tz) |tz| {
+                // Following glibc convention, which uses UTC if the TZ envvar
+                // is set, but the value is empty string.
+                if (tz.len == 0) return utc; // 'utc' being .fixed, utc.deinit() is a no-op
                 return localFromEnv(alloc, io, tz, env);
             }
 

@@ -26,18 +26,14 @@ Or install another [tag](https://github.com/rockorager/zeit/tags) instead of mai
 const std = @import("std");
 const zeit = @import("zeit");
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
-    var threaded = std.Io.Threaded.init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
+pub fn main(init: std.process.Init) !void {
 
     // Get a "now" instant in UTC.
-    const now = zeit.instant(.{.now = io}, &zeit.utc);
+    const now = zeit.instant(.{ .now = init.io }, &zeit.utc);
 
     // Load our local timezone. This needs an allocator. Optionally pass in a
     // zeit.EnvConfig to support TZ and TZDIR environment variables
-    const local = try zeit.local(allocator, io, .{});
+    const local = try zeit.local(init.gpa, init.io, .{});
     defer local.deinit();
 
     // Convert our instant to a new timezone
@@ -78,7 +74,7 @@ pub fn main() !void {
     // Load an arbitrary location using IANA location syntax. The location name
     // comes from an enum which will automatically map IANA location names to
     // Windows names, as needed. Pass an optional EnvConfig to support TZDIR
-    const vienna = try zeit.loadTimeZone(allocator, io, .@"Europe/Vienna", .{});
+    const vienna = try zeit.loadTimeZone(init.gpa, init.io, .@"Europe/Vienna", .{});
     defer vienna.deinit();
 
     // Parse an Instant from an ISO8601 or RFC3339 string

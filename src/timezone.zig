@@ -175,10 +175,10 @@ pub const Posix = struct {
                             state = .std_offset;
                         },
                         else => {
-                            i = std.mem.indexOfAnyPos(u8, str, i, "+-0123456789") orelse return error.InvalidPosix;
-                            std_ = str[0..i];
-                            // backup one so this gets parsed as an offset
-                            i -= 1;
+                            const std_len = std.mem.indexOfNone(u8, str, std.ascii.letters) orelse return error.InvalidPosix;
+                            if (std_len < 3) return error.InvalidPosix; // we don't check TZNAME_MAX
+                            std_ = str[0..std_len];
+                            i = std_len - 1;
                             state = .std_offset;
                         },
                     }

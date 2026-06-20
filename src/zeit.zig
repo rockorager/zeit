@@ -1931,6 +1931,17 @@ test {
     _ = @import("timezone.zig");
 }
 
+test "local returns UTC when TZ is empty" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    const local_tz = try local(std.testing.allocator, std.testing.io, .{ .tz = "" });
+    defer local_tz.deinit();
+
+    try std.testing.expectEqualStrings("UTC", local_tz.fixed.name);
+    try std.testing.expectEqual(0, local_tz.fixed.offset);
+    try std.testing.expectEqual(false, local_tz.fixed.is_dst);
+}
+
 test "fmtStrftime" {
     var buf: [128]u8 = undefined;
     const epoch = instant(.{ .unix_timestamp = 0 }, &utc);

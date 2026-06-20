@@ -145,223 +145,142 @@ pub const Posix = struct {
     };
 
     pub fn parse(str: []const u8) !Posix {
-        var std_: []const u8 = "";
-        var std_offset: Seconds = 0;
-        var dst: ?[]const u8 = null;
-        var dst_offset: ?Seconds = null;
-        var start: ?DSTSpec = null;
-        var end: ?DSTSpec = null;
+        const std_name = try parseName(str, 0);
+        const std_offset = try parseTime(str[std_name.end..]);
+        var i = std_name.end + std_offset.len;
 
-        const State = enum {
-            std,
-            std_offset,
-            dst,
-            dst_offset,
-            start,
-            end,
-        };
-
-        var state: State = .std;
-        var i: usize = 0;
-        while (i < str.len) : (i += 1) {
-            switch (state) {
-                .std => {
-                    switch (str[i]) {
-                        '<' => {
-                            // quoted. Consume until >
-                            const end_qt = std.mem.indexOfScalar(u8, str[i..], '>') orelse return error.InvalidPosix;
-                            std_ = str[i + 1 .. end_qt + i];
-                            i = end_qt;
-                            state = .std_offset;
-                        },
-                        else => {
-                            const std_len = std.mem.indexOfNone(u8, str, std.ascii.letters) orelse return error.InvalidPosix;
-                            if (std_len < 3) return error.InvalidPosix; // we don't check TZNAME_MAX
-                            std_ = str[0..std_len];
-                            i = std_len - 1;
-                            state = .std_offset;
-                        },
-                    }
-                },
-                .std_offset => {
-                    const offset_start = i;
-                    while (i < str.len) : (i += 1) {
-                        switch (str[i]) {
-                            '+',
-                            '-',
-                            ':',
-                            '0',
-                            '1',
-                            '2',
-                            '3',
-                            '4',
-                            '5',
-                            '6',
-                            '7',
-                            '8',
-                            '9',
-                            => {
-                                if (i == str.len - 1)
-                                    std_offset = parseTime(str[offset_start..]);
-                            },
-                            else => {
-                                std_offset = parseTime(str[offset_start..i]);
-                                i -= 1;
-                                state = .dst;
-                                break;
-                            },
-                        }
-                    }
-                },
-                .dst => {
-                    switch (str[i]) {
-                        '<' => {
-                            // quoted. Consume until >
-                            const dst_start = i + 1;
-                            i = std.mem.indexOfScalarPos(u8, str, i, '>') orelse return error.InvalidPosix;
-                            dst = str[dst_start..i];
-                        },
-                        else => {
-                            const dst_start = i;
-                            i += 1;
-                            while (i < str.len) : (i += 1) {
-                                switch (str[i]) {
-                                    ',' => {
-                                        dst = str[dst_start..i];
-                                        state = .start;
-                                        break;
-                                    },
-                                    '+', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => {
-                                        dst = str[dst_start..i];
-                                        // backup one so this gets parsed as an offset
-                                        i -= 1;
-                                        state = .dst_offset;
-                                        break;
-                                    },
-                                    else => {
-                                        if (i == str.len - 1)
-                                            dst = str[dst_start..];
-                                    },
-                                }
-                            }
-                        },
-                    }
-                },
-                .dst_offset => {
-                    const offset_start = i;
-                    while (i < str.len) : (i += 1) {
-                        switch (str[i]) {
-                            '+',
-                            '-',
-                            ':',
-                            '0',
-                            '1',
-                            '2',
-                            '3',
-                            '4',
-                            '5',
-                            '6',
-                            '7',
-                            '8',
-                            '9',
-                            => {
-                                if (i == str.len - 1)
-                                    std_offset = parseTime(str[offset_start..]);
-                            },
-                            ',' => {
-                                dst_offset = parseTime(str[offset_start..i]);
-                                state = .start;
-                                break;
-                            },
-                            else => {},
-                        }
-                    }
-                },
-                .start => {
-                    const comma_idx = std.mem.indexOfScalarPos(u8, str, i, ',') orelse return error.InvalidPosix;
-                    if (std.mem.indexOfScalarPos(u8, str[0..comma_idx], i, '/')) |idx| {
-                        start = try DSTSpec.parse(str[i..idx]);
-                        switch (start.?) {
-                            .julian => |*j| j.time = parseTime(str[idx + 1 .. comma_idx]),
-                            .julian_leap => |*j| j.time = parseTime(str[idx + 1 .. comma_idx]),
-                            .mwd => |*m| m.time = parseTime(str[idx + 1 .. comma_idx]),
-                        }
-                    } else {
-                        start = try DSTSpec.parse(str[i..comma_idx]);
-                    }
-                    state = .end;
-                    i = comma_idx;
-                },
-                .end => {
-                    if (std.mem.indexOfScalarPos(u8, str, i, '/')) |idx| {
-                        end = try DSTSpec.parse(str[i..idx]);
-                        switch (end.?) {
-                            .julian => |*j| j.time = parseTime(str[idx + 1 ..]),
-                            .julian_leap => |*j| j.time = parseTime(str[idx + 1 ..]),
-                            .mwd => |*m| m.time = parseTime(str[idx + 1 ..]),
-                        }
-                    } else {
-                        end = try DSTSpec.parse(str[i..]);
-                    }
-                    break;
-                },
-            }
+        if (i == str.len) {
+            return .{
+                .std = std_name.text,
+                .std_offset = std_offset.seconds,
+            };
         }
+
+        if (str[i] == ',') return error.InvalidPosix;
+
+        const dst_name = try parseName(str, i);
+        i = dst_name.end;
+
+        var dst_offset: ?Seconds = null;
+        if (i < str.len and str[i] != ',') {
+            const offset = try parseTime(str[i..]);
+            dst_offset = offset.seconds;
+            i += offset.len;
+        }
+
+        if (i == str.len) {
+            return .{
+                .std = std_name.text,
+                .std_offset = std_offset.seconds,
+                .dst = dst_name.text,
+                .dst_offset = dst_offset,
+            };
+        }
+
+        if (str[i] != ',') return error.InvalidPosix;
+        i += 1;
+
+        const comma_idx = std.mem.indexOfScalarPos(u8, str, i, ',') orelse return error.InvalidPosix;
+        const start = try parseDSTSpecWithTime(str[i..comma_idx]);
+        const end = try parseDSTSpecWithTime(str[comma_idx + 1 ..]);
+
         return .{
-            .std = std_,
-            .std_offset = std_offset,
-            .dst = dst,
+            .std = std_name.text,
+            .std_offset = std_offset.seconds,
+            .dst = dst_name.text,
             .dst_offset = dst_offset,
             .start = start,
             .end = end,
         };
     }
 
-    fn parseTime(str: []const u8) Seconds {
-        const State = enum {
-            hour,
-            minute,
-            second,
-        };
-        var is_neg = false;
-        var state: State = .hour;
-        var offset_h: i64 = 0;
-        var offset_m: i64 = 0;
-        var offset_s: i64 = 0;
-        var i: usize = 0;
-        while (i < str.len) : (i += 1) {
-            switch (state) {
-                .hour => {
-                    switch (str[i]) {
-                        '-' => is_neg = true,
-                        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => |d| {
-                            offset_h = offset_h * 10 + @as(i64, d - '0');
-                        },
-                        ':' => state = .minute,
-                        else => {},
-                    }
-                },
-                .minute => {
-                    switch (str[i]) {
-                        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => |d| {
-                            offset_m = offset_m * 10 + @as(i64, d - '0');
-                        },
-                        ':' => state = .second,
-                        else => {},
-                    }
-                },
-                .second => {
-                    switch (str[i]) {
-                        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' => |d| {
-                            offset_s = offset_s * 10 + @as(i64, d - '0');
-                        },
-                        else => {},
-                    }
-                },
+    const Name = struct {
+        text: []const u8,
+        end: usize,
+    };
+
+    fn parseName(str: []const u8, start: usize) !Name {
+        if (start >= str.len) return error.InvalidPosix;
+
+        if (str[start] == '<') {
+            const end = std.mem.indexOfScalarPos(u8, str, start + 1, '>') orelse return error.InvalidPosix;
+            const text = str[start + 1 .. end];
+            if (text.len < 3) return error.InvalidPosix; // we don't check TZNAME_MAX
+            return .{ .text = text, .end = end + 1 };
+        }
+
+        var end = start;
+        while (end < str.len and isAsciiAlpha(str[end])) : (end += 1) {}
+        const text = str[start..end];
+        if (text.len < 3) return error.InvalidPosix; // we don't check TZNAME_MAX
+        return .{ .text = text, .end = end };
+    }
+
+    fn isAsciiAlpha(c: u8) bool {
+        return (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z');
+    }
+
+    const ParsedTime = struct {
+        seconds: Seconds,
+        len: usize,
+    };
+
+    fn parseDSTSpecWithTime(str: []const u8) !DSTSpec {
+        const slash_idx = std.mem.indexOfScalar(u8, str, '/');
+        var spec = try DSTSpec.parse(if (slash_idx) |idx| str[0..idx] else str);
+        if (slash_idx) |idx| {
+            const time = try parseTime(str[idx + 1 ..]);
+            if (idx + 1 + time.len != str.len) return error.InvalidPosix;
+            switch (spec) {
+                .julian => |*j| j.time = time.seconds,
+                .julian_leap => |*j| j.time = time.seconds,
+                .mwd => |*m| m.time = time.seconds,
             }
         }
+        return spec;
+    }
+
+    fn parseTime(str: []const u8) !ParsedTime {
+        if (str.len == 0) return error.InvalidPosix;
+
+        var is_neg = false;
+        var i: usize = 0;
+        switch (str[i]) {
+            '-' => {
+                is_neg = true;
+                i += 1;
+            },
+            '+' => i += 1,
+            else => {},
+        }
+
+        const hour_start = i;
+        while (i < str.len and std.ascii.isDigit(str[i])) : (i += 1) {}
+        if (hour_start == i) return error.InvalidPosix;
+        const offset_h = try std.fmt.parseInt(i64, str[hour_start..i], 10);
+
+        var offset_m: i64 = 0;
+        var offset_s: i64 = 0;
+        if (i < str.len and str[i] == ':') {
+            i += 1;
+            const minute_start = i;
+            while (i < str.len and std.ascii.isDigit(str[i])) : (i += 1) {}
+            if (minute_start == i) return error.InvalidPosix;
+            offset_m = try std.fmt.parseInt(i64, str[minute_start..i], 10);
+            if (offset_m > 59) return error.InvalidPosix;
+
+            if (i < str.len and str[i] == ':') {
+                i += 1;
+                const second_start = i;
+                while (i < str.len and std.ascii.isDigit(str[i])) : (i += 1) {}
+                if (second_start == i) return error.InvalidPosix;
+                offset_s = try std.fmt.parseInt(i64, str[second_start..i], 10);
+                if (offset_s > 59) return error.InvalidPosix;
+            }
+        }
+
         const offset = offset_h * s_per_hour + offset_m * s_per_min + offset_s;
-        return if (is_neg) -offset else offset;
+        return .{ .seconds = if (is_neg) -offset else offset, .len = i };
     }
 
     /// reports true if the unix timestamp occurs when DST is in effect
@@ -962,10 +881,13 @@ test "timezone.zig: Posix.isDST" {
 }
 
 test "timezone.zig: Posix.parseTime" {
-    try std.testing.expectEqual(0, Posix.parseTime("00:00:00"));
-    try std.testing.expectEqual(-3600, Posix.parseTime("-1"));
-    try std.testing.expectEqual(-7200, Posix.parseTime("-02:00:00"));
-    try std.testing.expectEqual(3660, Posix.parseTime("+1:01"));
+    try std.testing.expectEqual(0, (try Posix.parseTime("00:00:00")).seconds);
+    try std.testing.expectEqual(-3600, (try Posix.parseTime("-1")).seconds);
+    try std.testing.expectEqual(-7200, (try Posix.parseTime("-02:00:00")).seconds);
+    try std.testing.expectEqual(3660, (try Posix.parseTime("+1:01")).seconds);
+    try std.testing.expectError(error.InvalidPosix, Posix.parseTime(""));
+    try std.testing.expectError(error.InvalidPosix, Posix.parseTime("1:"));
+    try std.testing.expectError(error.InvalidPosix, Posix.parseTime("1:60"));
 }
 
 test "timezone.zig: Posix.parse" {
@@ -999,6 +921,23 @@ test "timezone.zig: Posix.parse" {
         try std.testing.expectEqualStrings("UTC", t.std);
         try std.testing.expectEqual(-3661, t.std_offset);
     }
+    {
+        const t = try Posix.parse("UTC0EDT4");
+        try std.testing.expectEqualStrings("UTC", t.std);
+        try std.testing.expectEqual(0, t.std_offset);
+        try std.testing.expectEqualStrings("EDT", t.dst.?);
+        try std.testing.expectEqual(14400, t.dst_offset.?);
+    }
+    {
+        const t = try Posix.parse("<-00>0");
+        try std.testing.expectEqualStrings("-00", t.std);
+        try std.testing.expectEqual(0, t.std_offset);
+    }
+    try std.testing.expectError(error.InvalidPosix, Posix.parse("0"));
+    try std.testing.expectError(error.InvalidPosix, Posix.parse("UT0"));
+    try std.testing.expectError(error.InvalidPosix, Posix.parse("UTC,foo"));
+    try std.testing.expectError(error.InvalidPosix, Posix.parse("UTC/0"));
+    try std.testing.expectError(error.InvalidPosix, Posix.parse("UTC0ED"));
     {
         const t = try Posix.parse("CST1CDT");
         try std.testing.expectEqualStrings("CST", t.std);

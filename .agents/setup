@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Tested with zeit's Zig 0.17-dev API and the time-of-day benchmarks.
-version='0.17.0-dev.2033+af24fd11a'
-checksum='c130aac1a5d7ce7babd6a74ee508638721bf9698d64077c008cea2118bc913a9'
+version='0.17.0'
+checksum='1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
 install_dir="$HOME/.local/share/zeit/zig-$version"
 
 if [[ ! -x "$install_dir/zig" ]]; then
     archive=$(mktemp)
     trap 'rm -f "$archive"' EXIT
-    curl -fsSL "https://ziglang.org/builds/zig-x86_64-linux-$version.tar.xz" -o "$archive"
+    curl -fsSL "https://ziglang.org/download/$version/zig-x86_64-linux-$version.tar.xz" -o "$archive"
     echo "$checksum  $archive" | sha256sum -c -
     mkdir -p "$install_dir"
     tar -xJf "$archive" --strip-components=1 -C "$install_dir"

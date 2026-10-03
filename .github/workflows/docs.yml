@@ -26,8 +26,6 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v2
       - uses: mlugg/setup-zig@v2
-        with:
-          version: master
       - run: zig build docs
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -4,7 +4,7 @@ A time library written in zig.
 
 ## Install
 
-zeit's `main` branch currently tracks Zig 0.17-dev.
+zeit's `main` branch currently tracks Zig 0.17.
 
 ```
 zig fetch --save git+https://github.com/rockorager/zeit#main

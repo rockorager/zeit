@@ -6,7 +6,7 @@ uses V1; the original signed arithmetic is retained as `baseline`.
 
 ## Run
 
-From the repository root, with Zig 0.17-dev:
+From the repository root, with Zig 0.17:
 
 ```sh
 zig test -O ReleaseSafe --dep zeit -Mroot=bench/bench_time.zig \

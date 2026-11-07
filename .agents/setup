@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version='0.17.0'
-checksum='1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
+version='0.17.1'
+checksum='3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a'
 install_dir="$HOME/.local/share/zeit/zig-$version"
 
 if [[ ! -x "$install_dir/zig" ]]; then
